@@ -42,7 +42,7 @@ export function QuizFeedback({ show, isCorrect, correctAnswer, explanation, isRe
                     animate={{ y: 0 }}
                     exit={{ y: '100%' }}
                     transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-                    className={`fixed bottom-0 left-0 right-0 p-6 safe-area-bottom rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-50 ${isCorrect ? 'bg-green-100' : 'bg-red-100'
+                    className={`fixed bottom-0 left-0 right-0 p-6 safe-area-bottom rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-[70] ${isCorrect ? 'bg-green-100' : 'bg-red-100'
                         }`}
                 >
                     <div className="max-w-lg mx-auto flex flex-col gap-4">

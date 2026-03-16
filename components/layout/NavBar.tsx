@@ -16,6 +16,13 @@ const navItems = [
 
 export function NavBar() {
     const pathname = usePathname()
+    const shouldHideNav =
+        pathname.startsWith('/aprender/missao/')
+        || pathname === '/aprender/revisao'
+
+    if (shouldHideNav) {
+        return null
+    }
 
     return (
         <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-xl border-t border-border safe-area-bottom">
