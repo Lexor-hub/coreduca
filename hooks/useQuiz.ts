@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { createBrowserClient } from '@/lib/supabase/client'
 import type { Questao, QuizAnswers, QuizCompletionResult } from '@/types/database'
 
-export type EstadoQuiz = 'carregando' | 'respondendo' | 'feedback' | 'reforco' | 'concluido'
+export type EstadoQuiz = 'carregando' | 'respondendo' | 'feedback' | 'reforco' | 'concluido' | 'erro'
 
 export function useQuiz(missaoId: string, userId: string) {
     const supabase = createBrowserClient()
@@ -15,10 +15,12 @@ export function useQuiz(missaoId: string, userId: string) {
     const [ultimaRespostaCorreta, setUltimaRespostaCorreta] = useState<boolean | null>(null)
     const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
     const [resultado, setResultado] = useState<QuizCompletionResult | null>(null)
+    const [erro, setErro] = useState<string | null>(null)
 
     const concluir = useCallback(async (finalResponses: QuizAnswers) => {
         if (!userId || !missaoId) return
 
+        setErro(null)
         setEstado('carregando')
 
         const { data, error } = await supabase
@@ -32,7 +34,8 @@ export function useQuiz(missaoId: string, userId: string) {
         if (error) {
             console.error('Erro ao concluir missao', error)
             setResultado(null)
-            setEstado('concluido')
+            setErro('Nao foi possivel concluir esta missao agora.')
+            setEstado('erro')
             return
         }
 
@@ -49,6 +52,7 @@ export function useQuiz(missaoId: string, userId: string) {
         setUltimaRespostaCorreta(null)
         setSelectedAnswer(null)
         setResultado(null)
+        setErro(null)
 
         const { data, error } = await supabase
             .from('questoes')
@@ -59,7 +63,10 @@ export function useQuiz(missaoId: string, userId: string) {
 
         if (error) {
             console.error('Erro ao carregar questoes', error)
+            setTodasQuestoes([])
             setQuestoes([])
+            setErro('Nao foi possivel carregar as questoes desta missao.')
+            setEstado('erro')
             return
         }
 
@@ -89,7 +96,9 @@ export function useQuiz(missaoId: string, userId: string) {
 
         const correta = resposta === questao.resposta_correta
         const respostasAtualizadas: QuizAnswers = { ...respostas, [questaoId]: { resposta, correta } }
-        const errosAtualizados = correta ? errosPendentes : [...errosPendentes, questaoId]
+        const errosAtualizados = correta
+            ? errosPendentes.filter((id) => id !== questaoId)
+            : Array.from(new Set([...errosPendentes, questaoId]))
 
         setSelectedAnswer(resposta)
         setUltimaRespostaCorreta(correta)
@@ -99,6 +108,7 @@ export function useQuiz(missaoId: string, userId: string) {
 
         setTimeout(async () => {
             setSelectedAnswer(null)
+            setUltimaRespostaCorreta(null)
             const proximoIndice = indiceAtual + 1
 
             if (proximoIndice < questoes.length) {
@@ -121,6 +131,6 @@ export function useQuiz(missaoId: string, userId: string) {
 
     return {
         estado, questoes, indiceAtual, errosPendentes,
-        ultimaRespostaCorreta, selectedAnswer, resultado, iniciar, responder
+        ultimaRespostaCorreta, selectedAnswer, resultado, erro, iniciar, responder
     }
 }

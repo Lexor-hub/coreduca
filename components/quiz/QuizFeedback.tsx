@@ -7,9 +7,11 @@ interface QuizFeedbackProps {
     show: boolean
     isCorrect: boolean | null
     correctAnswer?: string
+    explanation?: string | null
+    isRetryRound?: boolean
 }
 
-export function QuizFeedback({ show, isCorrect, correctAnswer }: QuizFeedbackProps) {
+export function QuizFeedback({ show, isCorrect, correctAnswer, explanation, isRetryRound = false }: QuizFeedbackProps) {
     return (
         <AnimatePresence>
             {show && isCorrect !== null && (
@@ -29,9 +31,19 @@ export function QuizFeedback({ show, isCorrect, correctAnswer }: QuizFeedbackPro
                             <h3 className={`text-xl font-black mb-1 ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>
                                 {isCorrect ? 'Incrível!' : 'Quase lá!'}
                             </h3>
+                            {isRetryRound && (
+                                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-700">
+                                    Rodada de reforco
+                                </p>
+                            )}
                             {!isCorrect && correctAnswer && (
                                 <p className="text-red-900 font-medium">
                                     A resposta correta é: <span className="font-extrabold">{correctAnswer}</span>
+                                </p>
+                            )}
+                            {explanation && (
+                                <p className={`mt-2 text-sm leading-relaxed ${isCorrect ? 'text-green-900' : 'text-red-900'}`}>
+                                    {explanation}
                                 </p>
                             )}
                         </div>

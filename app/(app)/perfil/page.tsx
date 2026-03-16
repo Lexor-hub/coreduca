@@ -41,7 +41,6 @@ export default function PerfilPage() {
     const [allBadges, setAllBadges] = useState<BadgeItem[]>([])
     const [stats, setStats] = useState({ missoes: 0, pronuncia: 0, ia: 0 })
     const [dataError, setDataError] = useState<string | null>(null)
-    const [signOutError, setSignOutError] = useState<string | null>(null)
     const [signingOut, setSigningOut] = useState(false)
     const [loading, setLoading] = useState(true)
 
@@ -144,16 +143,12 @@ export default function PerfilPage() {
     const handleSignOut = async () => {
         try {
             setSigningOut(true)
-            setSignOutError(null)
             await signOut()
-            router.replace('/login')
-            router.refresh()
         } catch (error) {
-            console.error('signOut error:', error)
-            setSignOutError('Nao foi possivel sair da conta agora. Tente novamente.')
-        } finally {
-            setSigningOut(false)
+            console.error('local signOut error:', error)
         }
+
+        window.location.replace('/auth/signout')
     }
 
     if (authLoading || loading) {
@@ -208,14 +203,6 @@ export default function PerfilPage() {
                     <Card className="border border-amber-200 bg-amber-50 shadow-sm">
                         <CardContent className="p-4 text-sm text-amber-800">
                             {dataError}
-                        </CardContent>
-                    </Card>
-                )}
-
-                {signOutError && (
-                    <Card className="border border-red-200 bg-red-50 shadow-sm">
-                        <CardContent className="p-4 text-sm text-red-700">
-                            {signOutError}
                         </CardContent>
                     </Card>
                 )}
