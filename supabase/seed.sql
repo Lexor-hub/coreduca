@@ -1,8 +1,10 @@
 insert into public.badges (slug, nome, descricao, icone, xp_recompensa)
 values
   ('primeira_missao', 'Primeira Missao', 'Completou a primeira missao', '🌸', 10),
-  ('streak_7', 'Semana Completa', 'Manteve uma sequencia de 7 dias', '🔥', 50),
-  ('streak_30', 'Mes Dedicada', 'Manteve uma sequencia de 30 dias', '⭐', 200),
+  ('streak_7', 'Esquenta de Hongdae', 'Acendeu sua rotina com 7 dias seguidos de estudo.', '🔥', 50),
+  ('streak_30', 'Flor de Mugunghwa', 'Manteve 30 dias ativos com a resiliencia da flor simbolo da Coreia.', '🌺', 200),
+  ('streak_60', 'Guardia do Hanok', 'Construiu uma rotina firme por 60 dias, como um hanok que resiste ao tempo.', '🏯', 350),
+  ('streak_100', 'Tigre de Joseon', 'Alcancou 100 dias seguidos e virou lenda da constancia.', '🐯', 600),
   ('pronuncia_90', 'Diccao Perfeita', 'Atingiu 90+ em pronuncia', '🎤', 30),
   ('missionaria', 'Missionaria', 'Concluiu 10 missoes', '📚', 100),
   ('comunicativa', 'Comunicativa', 'Criou 20 posts na comunidade', '💬', 50)

@@ -11,7 +11,7 @@ import { createBrowserClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { XPBar } from '@/components/gamificacao/XPBar'
 import { StreakBadge } from '@/components/gamificacao/StreakBadge'
-import { nivelXpThresholds, personaEmojiMap } from '@/lib/coreduca'
+import { getCurrentStreakMilestone, getNextStreakMilestone, nivelXpThresholds, personaEmojiMap, getGreeting } from '@/lib/coreduca'
 import type { AIPersona, Missao, PronunciationItem } from '@/types/database'
 
 type Persona = Pick<AIPersona, 'id' | 'slug' | 'nome' | 'descricao' | 'cor_tema'>
@@ -143,7 +143,11 @@ export default function HomePage() {
     const streak = profile?.streak_atual ?? 0
     const nivel = profile?.nivel_atual ?? 'exploradora'
     const xpMax = nivelXpThresholds[nivel] ?? 100
+    const currentStreakMilestone = getCurrentStreakMilestone(streak)
+    const nextStreakMilestone = getNextStreakMilestone(streak)
     const hasDynamicContent = personas.length > 0 || Boolean(featuredMission) || Boolean(featuredPhrase)
+    const interesse = profile?.interesse_principal
+    const showPersonasEarly = (interesse === 'doramas' || interesse === 'kpop') && personas.length > 0
 
     return (
         <>
@@ -175,9 +179,20 @@ export default function HomePage() {
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex justify-between items-start">
                     <div>
                         <h1 className="text-2xl font-extrabold">
-                            안녕! <span className="text-[var(--color-coreduca-blue)]">{displayName}</span> 👋
+                            {getGreeting()}, <span className="text-[var(--color-coreduca-blue)]">{displayName}</span> 👋
                         </h1>
-                        <p className="text-sm text-muted-foreground mt-1 font-medium">Pronta para aprender coreano hoje?</p>
+                        <p className="text-sm text-muted-foreground mt-1 font-medium">
+                            {currentStreakMilestone
+                                ? `${currentStreakMilestone.icone} ${currentStreakMilestone.nome} ativa! `
+                                : streak > 2
+                                    ? `🔥 ${streak} dias seguidos! `
+                                    : nextStreakMilestone
+                                        ? `Faltam ${nextStreakMilestone.threshold - streak} dias para sua primeira badge de streak. `
+                                        : ''}
+                            {profile?.interesse_principal === 'doramas' || profile?.interesse_principal === 'kpop'
+                                ? 'Vamos aprender com doramas hoje?'
+                                : 'Pronta para aprender coreano hoje?'}
+                        </p>
                     </div>
                     <StreakBadge streak={streak} />
                 </motion.div>
@@ -218,8 +233,38 @@ export default function HomePage() {
                     </Link>
                 </motion.div>
 
+                {/* AI Personas - early position for dorama/kpop fans */}
+                {showPersonasEarly && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }}>
+                        <div className="flex items-center justify-between mb-3">
+                            <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Pratique com IA</h2>
+                            <Link href="/ia" className="text-xs text-[var(--color-coreduca-blue)] font-semibold">
+                                Ver todas <ChevronRight className="h-3 w-3 inline" />
+                            </Link>
+                        </div>
+                        <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4">
+                            {personas.map((persona) => (
+                                <Link key={persona.id} href={`/ia/${persona.slug}`}>
+                                    <Card className="border-0 shadow-sm min-w-[140px] hover:shadow-md transition-all cursor-pointer">
+                                        <CardContent className="p-4 text-center">
+                                            <div
+                                                className="w-12 h-12 rounded-full mx-auto flex items-center justify-center shadow-sm"
+                                                style={{ backgroundColor: `${persona.cor_tema}20` }}
+                                            >
+                                                <span className="text-2xl">{personaEmojiMap[persona.slug] || '🤖'}</span>
+                                            </div>
+                                            <p className="font-bold text-sm mt-2">{persona.nome}</p>
+                                            <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">{persona.descricao?.slice(0, 50)}</p>
+                                        </CardContent>
+                                    </Card>
+                                </Link>
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+
                 {/* Desafio 10 Dias */}
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.25 }}>
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: showPersonasEarly ? 0.3 : 0.25 }}>
                     <Link href="/desafio">
                         <Card className="border-0 shadow-md bg-gradient-to-r from-[#D9252A] to-[#A855F7] text-white cursor-pointer hover:shadow-lg transition-all">
                             <CardContent className="p-4 flex items-center gap-4">
@@ -236,8 +281,8 @@ export default function HomePage() {
                     </Link>
                 </motion.div>
 
-                {/* AI Personas */}
-                {personas.length > 0 && (
+                {/* AI Personas - normal position */}
+                {!showPersonasEarly && personas.length > 0 && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
                         <div className="flex items-center justify-between mb-3">
                             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Pratique com IA</h2>
