@@ -5,7 +5,7 @@ insert into public.questoes (missao_id, tipo, enunciado, enunciado_coreano, opco
 select m.id, q.tipo, q.enunciado, q.enunciado_coreano, q.opcoes, q.resposta_correta, q.explicacao, q.ordem, true
 from public.missoes m
 join public.trilhas t on t.id = m.trilha_id
-cross join lateral (
+join lateral (
   values
     -- =============================================
     -- TRILHA: CUMPRIMENTOS

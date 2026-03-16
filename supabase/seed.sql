@@ -226,7 +226,7 @@ insert into public.questoes (missao_id, tipo, enunciado, enunciado_coreano, opco
 select m.id, q.tipo, q.enunciado, q.enunciado_coreano, q.opcoes, q.resposta_correta, q.explicacao, q.ordem, true
 from public.missoes m
 join public.trilhas t on t.id = m.trilha_id
-cross join lateral (
+join lateral (
   values
     -- CUMPRIMENTOS - Missao 1
     ('cumprimentos', 1, 3, 'multipla_escolha', 'Como dizer "Oi" de forma informal?', '안녕 (annyeong)', '["안녕","감사합니다","죄송합니다"]'::jsonb, '안녕', 'Usado entre amigos e pessoas proximas.'),
