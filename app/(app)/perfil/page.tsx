@@ -34,7 +34,7 @@ const nivelXpThresholds: Record<string, number> = {
 }
 
 export default function PerfilPage() {
-    const { user, profile, loading: authLoading, signOut } = useAuth()
+    const { user, profile, loading: authLoading, refreshProfile, signOut } = useAuth()
     const supabase = createBrowserClient()
     const router = useRouter()
     const [userBadges, setUserBadges] = useState<UserBadge[]>([])
@@ -134,11 +134,11 @@ export default function PerfilPage() {
     }, [supabase, profile])
 
     useEffect(() => {
-        if (!authLoading && !loading && (!user || !profile)) {
+        if (!authLoading && !loading && !user) {
             router.replace('/login')
             router.refresh()
         }
-    }, [authLoading, loading, user, profile, router])
+    }, [authLoading, loading, user, router])
 
     const handleSignOut = async () => {
         try {
@@ -146,9 +146,20 @@ export default function PerfilPage() {
             await signOut()
         } catch (error) {
             console.error('local signOut error:', error)
+        } finally {
+            window.location.replace('/auth/signout')
         }
+    }
 
-        window.location.replace('/auth/signout')
+    const handleProfileRetry = async () => {
+        try {
+            setLoading(true)
+            await refreshProfile()
+        } catch (error) {
+            console.error('refreshProfile error:', error)
+        } finally {
+            setLoading(false)
+        }
     }
 
     if (authLoading || loading) {
@@ -164,7 +175,7 @@ export default function PerfilPage() {
         )
     }
 
-    if (!user || !profile) {
+    if (!user) {
         return (
             <>
                 <TopBar title="Perfil" />
@@ -172,6 +183,41 @@ export default function PerfilPage() {
                     <Card className="border-0 shadow-sm">
                         <CardContent className="p-6 text-center text-sm text-muted-foreground">
                             Redirecionando para o login...
+                        </CardContent>
+                    </Card>
+                </div>
+            </>
+        )
+    }
+
+    if (!profile) {
+        return (
+            <>
+                <TopBar title="Perfil" />
+                <div className="px-4 py-5 space-y-4">
+                    <Card className="border-0 shadow-sm">
+                        <CardContent className="space-y-4 p-6 text-center">
+                            <div className="space-y-2">
+                                <h2 className="text-lg font-bold">Seu perfil nao esta disponivel agora</h2>
+                                <p className="text-sm text-muted-foreground">
+                                    A sessao foi carregada, mas os dados do perfil nao vieram do banco. Tente recarregar ou sair da conta.
+                                </p>
+                            </div>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+                                <button
+                                    onClick={handleProfileRetry}
+                                    className="rounded-full bg-[var(--color-coreduca-blue)] px-4 py-2 text-sm font-semibold text-white"
+                                >
+                                    Tentar novamente
+                                </button>
+                                <button
+                                    onClick={handleSignOut}
+                                    disabled={signingOut}
+                                    className="rounded-full border border-border px-4 py-2 text-sm font-semibold text-muted-foreground"
+                                >
+                                    {signingOut ? 'Saindo...' : 'Sair da conta'}
+                                </button>
+                            </div>
                         </CardContent>
                     </Card>
                 </div>

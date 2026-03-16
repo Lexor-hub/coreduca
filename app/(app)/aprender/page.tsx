@@ -26,6 +26,7 @@ export default function AprenderPage() {
     const [progressMap, setProgressMap] = useState<Record<string, UserProgress>>({})
     const [loadingData, setLoadingData] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [warning, setWarning] = useState<string | null>(null)
 
     useEffect(() => {
         if (authLoading) return // Wait for auth to resolve
@@ -34,8 +35,14 @@ export default function AprenderPage() {
             return
         }
 
+        const currentUserId = user.id
+
         async function fetchData() {
             try {
+                setLoadingData(true)
+                setError(null)
+                setWarning(null)
+
                 // Fetch trilhas
                 const { data: trilhasData, error: trilhasError } = await supabase
                     .from('trilhas')
@@ -43,29 +50,32 @@ export default function AprenderPage() {
                     .eq('ativo', true)
                     .order('ordem')
 
-                console.log('[Aprender] trilhas response:', { trilhasData, trilhasError })
-
                 if (trilhasError) {
-                    console.error('Error fetching trilhas:', trilhasError)
                     setError(`Erro ao carregar trilhas: ${trilhasError.message}`)
-                } else if (trilhasData) {
+                    setTrilhas([])
+                    setProgressMap({})
+                    return
+                }
+
+                if (trilhasData) {
                     setTrilhas(trilhasData)
                 }
 
                 // Fetch user progress
-                if (user) {
-                    const { data: progressData, error: progressError } = await supabase
-                        .from('user_progress')
-                        .select('*')
-                        .eq('user_id', user.id)
+                const { data: progressData, error: progressError } = await supabase
+                    .from('user_progress')
+                    .select('*')
+                    .eq('user_id', currentUserId)
 
-                    if (progressError) {
-                        console.error('Error fetching user progress:', progressError)
-                    } else if (progressData) {
-                        const map: Record<string, UserProgress> = {}
-                        progressData.forEach((progressItem) => { map[progressItem.trilha_id] = progressItem })
-                        setProgressMap(map)
-                    }
+                if (progressError) {
+                    setProgressMap({})
+                    setWarning('As trilhas foram carregadas, mas seu progresso ainda nao pode ser exibido.')
+                } else if (progressData) {
+                    const map: Record<string, UserProgress> = {}
+                    progressData.forEach((progressItem) => { map[progressItem.trilha_id] = progressItem })
+                    setProgressMap(map)
+                } else {
+                    setProgressMap({})
                 }
             } catch (err) {
                 console.error('Unexpected error in fetchData:', err)
@@ -118,6 +128,16 @@ export default function AprenderPage() {
     return (
         <>
             <TopBar title="Aprender" />
+
+            {warning && (
+                <div className="px-4 pt-5">
+                    <Card className="border border-amber-200 bg-amber-50 shadow-sm">
+                        <CardContent className="p-4 text-sm text-amber-800">
+                            {warning}
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
             {trilhas.length === 0 && !loadingData && (
                 <div className="flex flex-col items-center justify-center px-4 py-20 text-center">

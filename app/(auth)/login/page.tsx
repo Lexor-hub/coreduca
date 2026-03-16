@@ -7,12 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { Logo } from '@/components/ui/Logo'
 
 export default function LoginPage() {
-    const router = useRouter()
     const supabase = createBrowserClient()
 
     const [email, setEmail] = useState('')
@@ -20,6 +18,17 @@ export default function LoginPage() {
     const [showPassword, setShowPassword] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [authError] = useState<string | null>(() => {
+        if (typeof window === 'undefined') return null
+        return new URLSearchParams(window.location.search).get('error')
+    })
+    const displayError = error ?? (
+        authError === 'signout'
+            ? 'Sua sessao foi encerrada. Faca login novamente.'
+            : authError === 'auth'
+                ? 'Sua sessao expirou. Faca login novamente.'
+                : null
+    )
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -38,7 +47,7 @@ export default function LoginPage() {
             return
         }
 
-        router.push('/home')
+        window.location.replace('/home')
     }
 
     const handleGoogleLogin = async () => {
@@ -81,13 +90,13 @@ export default function LoginPage() {
                 className="w-full mt-8 space-y-4"
                 onSubmit={handleLogin}
             >
-                {error && (
+                {displayError && (
                     <motion.div
                         initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
                         className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 text-center"
                     >
-                        {error}
+                        {displayError}
                     </motion.div>
                 )}
 

@@ -97,10 +97,18 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
         }
     }, [authLoading, userId, router])
 
-    if (authLoading || loadingMeta || estado === 'carregando' || !userId) {
+    if (authLoading || loadingMeta || estado === 'carregando') {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
                 <Loader2 className="w-12 h-12 text-[var(--color-coreduca-blue)] animate-spin" />
+            </div>
+        )
+    }
+
+    if (!userId) {
+        return (
+            <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+                <p className="text-sm text-muted-foreground">Redirecionando para o login...</p>
             </div>
         )
     }

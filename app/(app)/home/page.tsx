@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ChevronRight, Sparkles, ShoppingBag, Flame } from 'lucide-react'
+import { ChevronRight, Sparkles, ShoppingBag, Flame, RotateCcw } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TopBar } from '@/components/layout/TopBar'
@@ -20,19 +20,26 @@ type FeaturedPhrase = Pick<PronunciationItem, 'id' | 'frase_coreano' | 'traducao
 
 export default function HomePage() {
     const { user, profile, loading: authLoading } = useAuth()
-    const supabase = createBrowserClient()
+    const supabase = useMemo(() => createBrowserClient(), [])
     const [personas, setPersonas] = useState<Persona[]>([])
     const [featuredMission, setFeaturedMission] = useState<FeaturedMission | null>(null)
     const [featuredPhrase, setFeaturedPhrase] = useState<FeaturedPhrase | null>(null)
     const [loadingData, setLoadingData] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [reloadKey, setReloadKey] = useState(0)
 
     useEffect(() => {
+        let cancelled = false
+
         async function fetchData() {
             try {
+                setLoadingData(true)
+                setError(null)
+
                 const [
-                    { data: personasData },
-                    { data: phraseData },
-                    { data: missionData },
+                    { data: personasData, error: personasError },
+                    { data: phraseData, error: phraseError },
+                    { data: missionData, error: missionError },
                 ] = await Promise.all([
                     supabase
                         .from('ai_personas')
@@ -53,18 +60,30 @@ export default function HomePage() {
                         .order('ordem'),
                 ])
 
-                if (personasData) setPersonas(personasData as Persona[])
-                if (phraseData) setFeaturedPhrase(phraseData as FeaturedPhrase)
+                if (cancelled) return
+
+                setPersonas(personasData ? (personasData as Persona[]) : [])
+                setFeaturedPhrase(phraseData ? (phraseData as FeaturedPhrase) : null)
+
+                let nextError: string | null = null
+
+                if (personasError || phraseError || missionError) {
+                    nextError = 'A home carregou parcialmente. Tente atualizar para buscar os dados mais recentes.'
+                }
 
                 if (missionData && missionData.length > 0) {
                     const missionRows = (missionData as unknown as FeaturedMission[]) || []
 
                     if (user) {
-                        const { data: attempts } = await supabase
+                        const { data: attempts, error: attemptsError } = await supabase
                             .from('missao_attempts')
                             .select('missao_id')
                             .eq('user_id', user.id)
                             .eq('status', 'concluida')
+
+                        if (attemptsError && !nextError) {
+                            nextError = 'Nao foi possivel carregar o progresso da missao do dia.'
+                        }
 
                         const completedIds = new Set(((attempts || []) as Array<{ missao_id: string }>).map((attempt) => attempt.missao_id))
                         const nextMission = missionRows.find((mission) => !completedIds.has(mission.id)) || missionRows[0]
@@ -72,15 +91,32 @@ export default function HomePage() {
                     } else {
                         setFeaturedMission(missionRows[0])
                     }
+                } else {
+                    setFeaturedMission(null)
                 }
+
+                setError(nextError)
             } catch (error) {
                 console.error('fetchData error:', error)
+
+                if (!cancelled) {
+                    setPersonas([])
+                    setFeaturedMission(null)
+                    setFeaturedPhrase(null)
+                    setError('Nao foi possivel carregar a home agora.')
+                }
             } finally {
-                setLoadingData(false)
+                if (!cancelled) {
+                    setLoadingData(false)
+                }
             }
         }
-        fetchData()
-    }, [supabase, user])
+        void fetchData()
+
+        return () => {
+            cancelled = true
+        }
+    }, [supabase, user, reloadKey])
 
     const isLoading = authLoading || loadingData
 
@@ -107,6 +143,7 @@ export default function HomePage() {
     const streak = profile?.streak_atual ?? 0
     const nivel = profile?.nivel_atual ?? 'exploradora'
     const xpMax = nivelXpThresholds[nivel] ?? 100
+    const hasDynamicContent = personas.length > 0 || Boolean(featuredMission) || Boolean(featuredPhrase)
 
     return (
         <>
@@ -117,6 +154,23 @@ export default function HomePage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
             >
+                {error && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <Card className="border border-amber-200 bg-amber-50 shadow-sm">
+                            <CardContent className="flex items-center justify-between gap-3 p-4">
+                                <p className="text-sm text-amber-800">{error}</p>
+                                <button
+                                    onClick={() => setReloadKey((current) => current + 1)}
+                                    className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-amber-800 shadow-sm"
+                                >
+                                    <RotateCcw className="h-3.5 w-3.5" />
+                                    Tentar novamente
+                                </button>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                )}
+
                 {/* Greeting & Streak */}
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex justify-between items-start">
                     <div>
@@ -227,6 +281,16 @@ export default function HomePage() {
                         </Card>
                     </Link>
                 </motion.div>
+
+                {!hasDynamicContent && !error && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <Card className="border border-dashed shadow-sm">
+                            <CardContent className="p-4 text-sm text-muted-foreground">
+                                Ainda nao ha conteudo em destaque para a home. Verifique se o seed do Supabase foi aplicado em producao.
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                )}
 
                 {(featuredMission || featuredPhrase) && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.38 }} className="grid gap-3">

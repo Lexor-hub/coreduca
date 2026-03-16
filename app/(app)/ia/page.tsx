@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Zap, Lock } from 'lucide-react'
+import { Zap, Lock, RotateCcw } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -11,7 +11,7 @@ import { useAuth } from '@/lib/auth-context'
 import { createBrowserClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import type { AIPersona } from '@/types/database'
-import { isPremium as checkPremium, planoLabel } from '@/lib/coreduca'
+import { isPremium as checkPremium } from '@/lib/coreduca'
 
 type Persona = Pick<AIPersona, 'id' | 'slug' | 'nome' | 'descricao' | 'foco' | 'cor_tema' | 'energia_maxima_free' | 'energia_maxima_premium'>
 
@@ -29,42 +29,81 @@ const gradientMap: Record<string, string> = {
 
 export default function IAPage() {
     const { user, profile } = useAuth()
-    const supabase = createBrowserClient()
+    const supabase = useMemo(() => createBrowserClient(), [])
     const [personas, setPersonas] = useState<Persona[]>([])
     const [energyMap, setEnergyMap] = useState<Record<string, number>>({})
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [reloadKey, setReloadKey] = useState(0)
 
     useEffect(() => {
+        let cancelled = false
+
         async function fetchData() {
-            const { data: personasData } = await supabase
-                .from('ai_personas')
-                .select('id, slug, nome, descricao, foco, cor_tema, energia_maxima_free, energia_maxima_premium')
-                .eq('ativo', true)
-                .order('ordem')
+            try {
+                setLoading(true)
+                setError(null)
 
-            if (personasData) setPersonas(personasData)
+                const { data: personasData, error: personasError } = await supabase
+                    .from('ai_personas')
+                    .select('id, slug, nome, descricao, foco, cor_tema, energia_maxima_free, energia_maxima_premium')
+                    .eq('ativo', true)
+                    .order('ordem')
 
-            if (user) {
-                const today = new Date().toISOString().split('T')[0]
-                const { data: sessions } = await supabase
-                    .from('ai_sessions')
-                    .select('persona_id, energia_usada')
-                    .eq('user_id', user.id)
-                    .eq('data', today)
+                if (cancelled) return
 
-                if (sessions) {
-                    const map: Record<string, number> = {}
-                    ;(sessions as Array<{ persona_id: string; energia_usada: number }>).forEach((session) => {
-                        map[session.persona_id] = session.energia_usada
-                    })
-                    setEnergyMap(map)
+                if (personasError) {
+                    setPersonas([])
+                    setError('Nao foi possivel carregar as personas de IA agora.')
+                } else {
+                    setPersonas(personasData ?? [])
+                }
+
+                if (user) {
+                    const today = new Date().toISOString().split('T')[0]
+                    const { data: sessions, error: sessionsError } = await supabase
+                        .from('ai_sessions')
+                        .select('persona_id, energia_usada')
+                        .eq('user_id', user.id)
+                        .eq('data', today)
+
+                    if (cancelled) return
+
+                    if (sessionsError) {
+                        setEnergyMap({})
+                        setError((current) => current ?? 'As personas foram carregadas, mas o consumo de energia nao pode ser exibido agora.')
+                    } else if (sessions) {
+                        const map: Record<string, number> = {}
+                        ;(sessions as Array<{ persona_id: string; energia_usada: number }>).forEach((session) => {
+                            map[session.persona_id] = session.energia_usada
+                        })
+                        setEnergyMap(map)
+                    } else {
+                        setEnergyMap({})
+                    }
+                } else {
+                    setEnergyMap({})
+                }
+            } catch (error) {
+                console.error('fetchData error:', error)
+
+                if (!cancelled) {
+                    setPersonas([])
+                    setEnergyMap({})
+                    setError('Nao foi possivel carregar a area de IA agora.')
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false)
                 }
             }
-
-            setLoading(false)
         }
-        fetchData()
-    }, [supabase, user])
+        void fetchData()
+
+        return () => {
+            cancelled = true
+        }
+    }, [supabase, user, reloadKey])
 
     if (loading) {
         return (
@@ -84,9 +123,32 @@ export default function IAPage() {
             <TopBar title="Praticar com IA" />
 
             <div className="px-4 py-5">
+                {error && (
+                    <Card className="mb-5 border border-amber-200 bg-amber-50 shadow-sm">
+                        <CardContent className="flex items-center justify-between gap-3 p-4">
+                            <p className="text-sm text-amber-800">{error}</p>
+                            <button
+                                onClick={() => setReloadKey((current) => current + 1)}
+                                className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-amber-800 shadow-sm"
+                            >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                Atualizar
+                            </button>
+                        </CardContent>
+                    </Card>
+                )}
+
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-muted-foreground mb-5">
                     Escolha uma persona e pratique coreano em uma conversa natural 💬
                 </motion.p>
+
+                {personas.length === 0 && !error && (
+                    <Card className="border border-dashed shadow-sm">
+                        <CardContent className="p-5 text-sm text-muted-foreground">
+                            Nenhuma persona ativa foi encontrada. Verifique se o seed do Supabase foi aplicado.
+                        </CardContent>
+                    </Card>
+                )}
 
                 <div className="space-y-4">
                     {personas.map((persona, i) => {
@@ -147,17 +209,20 @@ export default function IAPage() {
 
                 {!isPremium && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
-                        <Card className="border-0 shadow-lg mt-6 bg-gradient-to-r from-[var(--color-coreduca-blue)] to-[var(--color-coreduca-purple)] text-white">
-                            <CardContent className="p-5 text-center">
-                                <p className="text-2xl mb-2">⚡</p>
-                                <h3 className="font-extrabold text-lg">Quer mais conversas?</h3>
-                                <p className="text-sm text-white/80 mt-1">Premium: 30 mensagens/dia por persona</p>
-                                <button className="mt-3 bg-white text-[var(--color-coreduca-blue)] font-bold text-sm px-6 py-2.5 rounded-xl hover:bg-white/90 transition-colors">
-                                    Conhecer Premium
-                                </button>
-                            </CardContent>
-                        </Card>
-                    </motion.div>
+                            <Card className="border-0 shadow-lg mt-6 bg-gradient-to-r from-[var(--color-coreduca-blue)] to-[var(--color-coreduca-purple)] text-white">
+                                <CardContent className="p-5 text-center">
+                                    <p className="text-2xl mb-2">⚡</p>
+                                    <h3 className="font-extrabold text-lg">Quer mais conversas?</h3>
+                                    <p className="text-sm text-white/80 mt-1">Premium: 30 mensagens/dia por persona</p>
+                                    <Link
+                                        href="/store"
+                                        className="mt-3 inline-flex rounded-xl bg-white px-6 py-2.5 text-sm font-bold text-[var(--color-coreduca-blue)] transition-colors hover:bg-white/90"
+                                    >
+                                        Conhecer Premium
+                                    </Link>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
                 )}
             </div>
         </>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Lock, CheckCircle2, Play, ChevronRight, Flame, Star } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -32,6 +32,10 @@ type TrilhaWithMissoes = {
     }[]
 }
 
+type TrilhaRow = Omit<TrilhaWithMissoes, 'missoes'>
+type MissaoRow = TrilhaWithMissoes['missoes'][number] & { trilha_id: string }
+type MissaoAttemptRow = { missao_id: string }
+
 const hangulDodia: Record<number, { caractere: string; romanizacao: string; exemplo: string; exemploTraducao: string }> = {
     1: { caractere: 'ㅏ', romanizacao: 'a', exemplo: '아이 (ai)', exemploTraducao: 'criança' },
     2: { caractere: 'ㄱ', romanizacao: 'g/k', exemplo: '가다 (gada)', exemploTraducao: 'ir' },
@@ -51,57 +55,94 @@ export default function DesafioPage() {
     const [trilhas, setTrilhas] = useState<TrilhaWithMissoes[]>([])
     const [completedMissoes, setCompletedMissoes] = useState<Set<string>>(new Set())
     const [loadingData, setLoadingData] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [reloadKey, setReloadKey] = useState(0)
 
     useEffect(() => {
         if (authLoading) return
 
+        let cancelled = false
+
         async function fetchData() {
-            // Fetch all trilhas with their missoes, ordered
-            const { data: trilhasData } = await supabase
-                .from('trilhas')
-                .select('id, slug, titulo, descricao, ordem, icone, cor')
-                .eq('ativo', true)
-                .order('ordem')
+            try {
+                setLoadingData(true)
+                setError(null)
 
-            if (!trilhasData) { setLoadingData(false); return }
+                const { data: trilhasData, error: trilhasError } = await supabase
+                    .from('trilhas')
+                    .select('id, slug, titulo, descricao, ordem, icone, cor')
+                    .eq('ativo', true)
+                    .order('ordem')
 
-            // Fetch missoes for all trilhas
-            const { data: missoesData } = await supabase
-                .from('missoes')
-                .select('id, trilha_id, titulo, descricao, ordem, xp_recompensa')
-                .eq('ativo', true)
-                .order('ordem')
+                if (trilhasError) {
+                    throw new Error(`Nao foi possivel carregar as trilhas do desafio: ${trilhasError.message}`)
+                }
 
-            // Build structure
-            const missoesByTrilha: Record<string, TrilhaWithMissoes['missoes']> = {}
-            missoesData?.forEach((m: any) => {
-                if (!missoesByTrilha[m.trilha_id]) missoesByTrilha[m.trilha_id] = []
-                missoesByTrilha[m.trilha_id].push(m)
-            })
+                const { data: missoesData, error: missoesError } = await supabase
+                    .from('missoes')
+                    .select('id, trilha_id, titulo, descricao, ordem, xp_recompensa')
+                    .eq('ativo', true)
+                    .order('ordem')
 
-            const result: TrilhaWithMissoes[] = trilhasData.map((t: any) => ({
-                ...t,
-                missoes: missoesByTrilha[t.id] || [],
-            }))
-            setTrilhas(result)
+                if (missoesError) {
+                    throw new Error(`Nao foi possivel carregar as missoes do desafio: ${missoesError.message}`)
+                }
 
-            // Fetch user completed missoes
-            if (user) {
-                const { data: attempts } = await supabase
-                    .from('missao_attempts')
-                    .select('missao_id')
-                    .eq('user_id', user.id)
-                    .eq('status', 'concluida')
+                const missoesByTrilha: Record<string, TrilhaWithMissoes['missoes']> = {}
+                ;(missoesData as MissaoRow[] | null)?.forEach((m) => {
+                    if (!missoesByTrilha[m.trilha_id]) missoesByTrilha[m.trilha_id] = []
+                    missoesByTrilha[m.trilha_id].push(m)
+                })
 
-                if (attempts) {
-                    setCompletedMissoes(new Set(attempts.map((a: any) => a.missao_id)))
+                const result: TrilhaWithMissoes[] = ((trilhasData as TrilhaRow[] | null) ?? []).map((t) => ({
+                    ...t,
+                    missoes: missoesByTrilha[t.id] || [],
+                }))
+
+                if (!cancelled) {
+                    setTrilhas(result)
+                }
+
+                if (user) {
+                    const { data: attempts, error: attemptsError } = await supabase
+                        .from('missao_attempts')
+                        .select('missao_id')
+                        .eq('user_id', user.id)
+                        .eq('status', 'concluida')
+
+                    if (cancelled) return
+
+                    if (attemptsError) {
+                        setCompletedMissoes(new Set())
+                        setError('O desafio foi carregado, mas seu progresso ainda nao pode ser exibido.')
+                    } else if (attempts) {
+                        setCompletedMissoes(new Set((attempts as MissaoAttemptRow[]).map((attempt) => attempt.missao_id)))
+                    } else {
+                        setCompletedMissoes(new Set())
+                    }
+                } else if (!cancelled) {
+                    setCompletedMissoes(new Set())
+                }
+            } catch (error) {
+                console.error('fetchData error:', error)
+
+                if (!cancelled) {
+                    setTrilhas([])
+                    setCompletedMissoes(new Set())
+                    setError(error instanceof Error ? error.message : 'Nao foi possivel carregar o desafio agora.')
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoadingData(false)
                 }
             }
-
-            setLoadingData(false)
         }
-        fetchData()
-    }, [supabase, user, authLoading])
+        void fetchData()
+
+        return () => {
+            cancelled = true
+        }
+    }, [supabase, user, authLoading, reloadKey])
 
     const isLoading = authLoading || loadingData
 
@@ -112,6 +153,29 @@ export default function DesafioPage() {
                 <div className="px-4 py-5 space-y-4">
                     <Skeleton className="h-48 rounded-3xl" />
                     {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)}
+                </div>
+            </>
+        )
+    }
+
+    if (trilhas.length === 0) {
+        return (
+            <>
+                <TopBar title="Desafio 10 Dias" showBack />
+                <div className="px-4 py-5">
+                    <Card className="border-0 shadow-sm">
+                        <CardContent className="space-y-4 p-6 text-center">
+                            <p className="text-sm text-muted-foreground">
+                                {error || 'Nenhuma trilha do desafio foi encontrada.'}
+                            </p>
+                            <button
+                                onClick={() => setReloadKey((current) => current + 1)}
+                                className="rounded-full bg-[var(--color-coreduca-blue)] px-4 py-2 text-sm font-semibold text-white"
+                            >
+                                Tentar novamente
+                            </button>
+                        </CardContent>
+                    </Card>
                 </div>
             </>
         )
@@ -142,6 +206,14 @@ export default function DesafioPage() {
             <TopBar title="Desafio 10 Dias" showBack />
 
             <div className="px-4 py-5 space-y-5">
+                {error && (
+                    <Card className="border border-amber-200 bg-amber-50 shadow-sm">
+                        <CardContent className="p-4 text-sm text-amber-800">
+                            {error}
+                        </CardContent>
+                    </Card>
+                )}
+
                 {/* Hero card */}
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}

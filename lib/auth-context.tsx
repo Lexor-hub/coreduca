@@ -22,10 +22,10 @@ const AuthContext = createContext<AuthContextType>({
 })
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+    const [supabase] = useState(() => createBrowserClient())
     const [user, setUser] = useState<User | null>(null)
     const [profile, setProfile] = useState<Profile | null>(null)
     const [loading, setLoading] = useState(true)
-    const supabase = createBrowserClient()
 
     const registrarStreak = useCallback(async (userId: string) => {
         try {
@@ -43,42 +43,107 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .eq('id', userId)
             .single()
         if (error) throw error
-        setProfile(data)
+        return data as Profile
     }, [supabase, registrarStreak])
 
     const refreshProfile = useCallback(async () => {
-        if (user) await fetchProfile(user.id)
+        if (!user) {
+            setProfile(null)
+            return
+        }
+
+        const nextProfile = await fetchProfile(user.id)
+        setProfile(nextProfile)
     }, [user, fetchProfile])
 
     const signOut = useCallback(async () => {
-        const { error } = await supabase.auth.signOut({ scope: 'local' })
-        if (error) throw error
         setUser(null)
         setProfile(null)
+        setLoading(false)
+
+        const { error } = await supabase.auth.signOut({ scope: 'local' })
+        if (error && error.message !== 'Auth session missing!') throw error
     }, [supabase])
 
     useEffect(() => {
-        // onAuthStateChange fires INITIAL_SESSION synchronously from cache,
-        // so there is no need for a separate getUser() call.
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (_event, session) => {
-                const currentUser = session?.user ?? null
-                setUser(currentUser)
-                try {
-                    if (currentUser) {
-                        await fetchProfile(currentUser.id)
-                    } else {
-                        setProfile(null)
-                    }
-                } catch {
+        let cancelled = false
+
+        const syncUser = async (currentUser: User | null) => {
+            if (cancelled) return
+
+            setUser(currentUser)
+
+            if (!currentUser) {
+                setProfile(null)
+                return
+            }
+
+            try {
+                const nextProfile = await fetchProfile(currentUser.id)
+                if (!cancelled) {
+                    setProfile(nextProfile)
+                }
+            } catch {
+                if (!cancelled) {
                     setProfile(null)
-                } finally {
+                }
+            }
+        }
+
+        async function bootstrapSession() {
+            try {
+                const { data, error } = await supabase.auth.getSession()
+                if (error) throw error
+
+                await syncUser(data.session?.user ?? null)
+            } catch {
+                if (!cancelled) {
+                    setUser(null)
+                    setProfile(null)
+                }
+            } finally {
+                if (!cancelled) {
                     setLoading(false)
                 }
             }
+        }
+
+        void bootstrapSession()
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+            (event, session) => {
+                if (event === 'SIGNED_OUT') {
+                    if (!cancelled) {
+                        setUser(null)
+                        setProfile(null)
+                        setLoading(false)
+                    }
+                    return
+                }
+
+                if (
+                    event !== 'INITIAL_SESSION' &&
+                    event !== 'SIGNED_IN' &&
+                    event !== 'TOKEN_REFRESHED' &&
+                    event !== 'USER_UPDATED'
+                ) {
+                    return
+                }
+
+                void (async () => {
+                    await syncUser(session?.user ?? null)
+
+                    if (!cancelled) {
+                        setLoading(false)
+                    }
+                })()
+            }
         )
 
-        return () => subscription.unsubscribe()
+        return () => {
+            cancelled = true
+            subscription.unsubscribe()
+        }
     }, [supabase, fetchProfile])
 
     return (
