@@ -178,7 +178,7 @@ insert into public.questoes (missao_id, tipo, enunciado, enunciado_coreano, opco
 select m.id, 'multipla_escolha', q.enunciado, q.enunciado_coreano, q.opcoes, q.resposta_correta, q.explicacao, q.ordem, true
 from public.missoes m
 join public.trilhas t on t.id = m.trilha_id
-cross join lateral (
+join lateral (
   values
     ('cumprimentos', 1, 1, 'Como dizer "Ola" de forma educada?', '안녕하세요', '["안녕하세요","감사합니다","미안해요"]'::jsonb, '안녕하세요', 'Use 안녕하세요 como saudacao formal mais comum.'),
     ('cumprimentos', 1, 2, 'Qual traducao de 안녕하세요?', '안녕하세요', '["Tchau","Ola","Obrigada"]'::jsonb, 'Ola', 'E a forma mais comum de dizer ola.'),
@@ -223,7 +223,7 @@ and not exists (
 
 -- Questoes extras: 8 novas por missao (ordem 3-10), total 120
 insert into public.questoes (missao_id, tipo, enunciado, enunciado_coreano, opcoes, resposta_correta, explicacao, ordem, ativo)
-select m.id, q.tipo, q.enunciado, q.enunciado_coreano, q.opcoes, q.resposta_correta, q.explicacao, q.ordem, true
+select m.id, q.tipo::public.question_type, q.enunciado, q.enunciado_coreano, q.opcoes, q.resposta_correta, q.explicacao, q.ordem, true
 from public.missoes m
 join public.trilhas t on t.id = m.trilha_id
 join lateral (

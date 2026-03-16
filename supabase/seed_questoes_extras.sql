@@ -2,7 +2,7 @@
 -- Total: 120 novas questoes (8 x 15 missoes)
 
 insert into public.questoes (missao_id, tipo, enunciado, enunciado_coreano, opcoes, resposta_correta, explicacao, ordem, ativo)
-select m.id, q.tipo, q.enunciado, q.enunciado_coreano, q.opcoes, q.resposta_correta, q.explicacao, q.ordem, true
+select m.id, q.tipo::public.question_type, q.enunciado, q.enunciado_coreano, q.opcoes, q.resposta_correta, q.explicacao, q.ordem, true
 from public.missoes m
 join public.trilhas t on t.id = m.trilha_id
 join lateral (
