@@ -12,6 +12,7 @@ import { QuizResultado } from '@/components/quiz/QuizResultado'
 import { MiniLicao } from '@/components/quiz/MiniLicao'
 import { useAuth } from '@/lib/auth-context'
 import { createBrowserClient } from '@/lib/supabase/client'
+import { buildCommunityShareHref } from '@/lib/community'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -124,6 +125,17 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
             resultado.total_missoes > 0
                 ? `${resultado.missoes_concluidas}/${resultado.total_missoes} missoes concluidas nesta trilha`
                 : null
+        const shareHref = buildCommunityShareHref({
+            clubSlug: 'vitorias',
+            postKind: 'vitoria',
+            promptSlug: 'missao-concluida',
+            contextType: 'missao',
+            contextId: missao?.id ?? resolvedParams.missaoId,
+            contextLabel: missao && trilha ? `${missao.titulo} · ${trilha.titulo}` : missao?.titulo ?? 'Missao concluida',
+            prefill: missao && trilha
+                ? `Fechei ${missao.titulo} na trilha ${trilha.titulo} hoje e saio daqui com mais confianca no coreano.`
+                : 'Fechei uma missao hoje e quis registrar essa vitoria.',
+        })
 
         return (
             <QuizResultado
@@ -131,6 +143,7 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
                 xpGanho={resultado.xp_ganho}
                 badgeNome={resultado.badge_nome}
                 progressoResumo={progressoResumo}
+                onCompartilhar={() => router.push(shareHref)}
                 onContinuar={() => router.push(returnHref)}
             />
         )

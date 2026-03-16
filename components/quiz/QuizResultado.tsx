@@ -10,10 +10,18 @@ interface QuizResultadoProps {
     xpGanho: number
     badgeNome?: string | null
     progressoResumo?: string | null
+    onCompartilhar?: (() => void) | null
     onContinuar: () => void
 }
 
-export function QuizResultado({ score, xpGanho, badgeNome, progressoResumo, onContinuar }: QuizResultadoProps) {
+export function QuizResultado({
+    score,
+    xpGanho,
+    badgeNome,
+    progressoResumo,
+    onCompartilhar,
+    onContinuar,
+}: QuizResultadoProps) {
     const isPerfect = score === 100
     const headline = isPerfect ? 'Perfeito!' : score >= 70 ? 'Missao concluida' : 'Boa evolucao'
     const subheadline = isPerfect
@@ -73,14 +81,27 @@ export function QuizResultado({ score, xpGanho, badgeNome, progressoResumo, onCo
                         </p>
                     )}
 
-                    <Button
-                        onClick={onContinuar}
-                        size="lg"
-                        className="h-14 w-full rounded-full bg-white text-[var(--color-coreduca-blue)] hover:bg-white/90 text-lg shadow-lg font-bold"
-                    >
-                        Continuar
-                        <ArrowRight className="ml-2 h-5 w-5" />
-                    </Button>
+                    <div className="space-y-3">
+                        {onCompartilhar && (
+                            <Button
+                                onClick={onCompartilhar}
+                                size="lg"
+                                variant="outline"
+                                className="h-14 w-full rounded-full border-white/30 bg-white/10 text-lg font-bold text-white hover:bg-white/15"
+                            >
+                                Compartilhar vitoria
+                            </Button>
+                        )}
+
+                        <Button
+                            onClick={onContinuar}
+                            size="lg"
+                            className="h-14 w-full rounded-full bg-white text-[var(--color-coreduca-blue)] hover:bg-white/90 text-lg shadow-lg font-bold"
+                        >
+                            Continuar
+                            <ArrowRight className="ml-2 h-5 w-5" />
+                        </Button>
+                    </div>
                 </CardContent>
             </Card>
         </motion.div>

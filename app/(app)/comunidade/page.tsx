@@ -1,308 +1,278 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import Link from 'next/link'
-import { motion } from 'framer-motion'
-import { MessageCircle, Plus } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Skeleton } from '@/components/ui/skeleton'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Plus } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
-import { useAuth } from '@/lib/auth-context'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { createBrowserClient } from '@/lib/supabase/client'
-import { communityReactionEmojis } from '@/lib/coreduca'
-import type { CommunityChannel, CommunityPost } from '@/types/database'
+import { useAuth } from '@/lib/auth-context'
+import { getInterestMeta } from '@/lib/coreduca'
+import {
+  communityClubDefinitions,
+  communityClubOrder,
+  communityRelevantSlugs,
+  getCommunitySourceSlugs,
+  normalizeCommunityClubSlug,
+  recommendCommunityClub,
+  type CommunityClubSlug,
+} from '@/lib/community'
+import { CommunityHero } from '@/components/comunidade/CommunityHero'
+import { ClubCard } from '@/components/comunidade/ClubCard'
+import {
+  PromptComposerSheet,
+  type CommunityComposerPayload,
+} from '@/components/comunidade/PromptComposerSheet'
+import type { CommunityChannel } from '@/types/database'
 
-type PostFeedItem = Pick<
-    CommunityPost,
-    'id' | 'channel_id' | 'conteudo' | 'reacoes' | 'total_comentarios' | 'pinned' | 'status' | 'created_at' | 'updated_at' | 'user_id'
-> & {
-    profiles?: CommunityPost['profiles']
-    post_reactions?: Array<{ emoji: string; user_id: string }>
+type ClubSummary = {
+  postCount: number
+  latestSnippet: string | null
 }
 
-function timeAgo(dateStr: string): string {
-    const diff = Date.now() - new Date(dateStr).getTime()
-    const hours = Math.floor(diff / 3600000)
-    if (hours < 1) return 'agora'
-    if (hours < 24) return `${hours}h atrás`
-    const days = Math.floor(hours / 24)
-    return `${days}d atrás`
+const CLUB_SUMMARY_LIMIT = 40
+
+function isMissingCommunityColumns(message: string) {
+  return message.includes('column') && message.includes('community_posts')
 }
 
 export default function ComunidadePage() {
-    const { user } = useAuth()
-    const supabase = createBrowserClient()
-    const [channels, setChannels] = useState<CommunityChannel[]>([])
-    const [activeChannel, setActiveChannel] = useState<string | null>(null)
-    const [posts, setPosts] = useState<PostFeedItem[]>([])
-    const [loading, setLoading] = useState(true)
-    const [composerOpen, setComposerOpen] = useState(false)
-    const [postContent, setPostContent] = useState('')
-    const [submitting, setSubmitting] = useState(false)
-    const [error, setError] = useState<string | null>(null)
+  const { user, profile } = useAuth()
+  const supabase = useMemo(() => createBrowserClient(), [])
+  const [channels, setChannels] = useState<CommunityChannel[]>([])
+  const [summaryMap, setSummaryMap] = useState<Record<CommunityClubSlug, ClubSummary>>({
+    duvidas: { postCount: 0, latestSnippet: null },
+    fandom: { postCount: 0, latestSnippet: null },
+    vitorias: { postCount: 0, latestSnippet: null },
+  })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [composerOpen, setComposerOpen] = useState(false)
+  const [composerError, setComposerError] = useState<string | null>(null)
+  const [composerSubmitting, setComposerSubmitting] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-    const fetchPosts = useCallback(async (channelId: string) => {
-        const { data } = await supabase
-            .from('community_posts')
-            .select('id, channel_id, conteudo, reacoes, total_comentarios, pinned, status, created_at, updated_at, user_id, profiles(display_name, username, avatar_url), post_reactions(emoji, user_id)')
-            .eq('channel_id', channelId)
-            .eq('status', 'ativo')
-            .order('pinned', { ascending: false })
-            .order('created_at', { ascending: false })
-            .limit(20)
+  const loadCommunityHome = useCallback(async () => {
+    setLoading(true)
+    setError(null)
 
-        return ((data as unknown) as PostFeedItem[]) || []
-    }, [supabase])
+    const { data: channelsData, error: channelsError } = await supabase
+      .from('community_channels')
+      .select('id, slug, nome, descricao, icone, cor, ordem, ativo')
+      .in('slug', communityRelevantSlugs)
+      .eq('ativo', true)
+      .order('ordem')
 
-    useEffect(() => {
-        let active = true
-
-        async function loadChannels() {
-            const { data } = await supabase
-                .from('community_channels')
-                .select('id, slug, nome, descricao, icone, cor, ordem, ativo')
-                .eq('ativo', true)
-                .order('ordem')
-
-            if (!active) return
-
-            const loadedChannels = (data as CommunityChannel[]) || []
-            setChannels(loadedChannels)
-            setActiveChannel((current) => current ?? loadedChannels[0]?.id ?? null)
-            setLoading(false)
-        }
-
-        void loadChannels()
-
-        return () => {
-            active = false
-        }
-    }, [supabase])
-
-    useEffect(() => {
-        if (!activeChannel) return
-        const channelId = activeChannel
-
-        let active = true
-
-        async function loadPosts() {
-            const loadedPosts = await fetchPosts(channelId)
-            if (!active) return
-            setPosts(loadedPosts)
-        }
-
-        void loadPosts()
-
-        return () => {
-            active = false
-        }
-    }, [activeChannel, fetchPosts])
-
-    const handleCreatePost = async () => {
-        if (!user || !activeChannel || !postContent.trim()) return
-
-        setSubmitting(true)
-        setError(null)
-
-        const { error: insertError } = await supabase.from('community_posts').insert({
-            user_id: user.id,
-            channel_id: activeChannel,
-            conteudo: postContent.trim(),
-        })
-
-        setSubmitting(false)
-
-        if (insertError) {
-            setError(insertError.message)
-            return
-        }
-
-        setPostContent('')
-        setComposerOpen(false)
-        const loadedPosts = await fetchPosts(activeChannel)
-        setPosts(loadedPosts)
+    if (channelsError) {
+      setChannels([])
+      setError('Nao foi possivel carregar os clubes agora.')
+      setLoading(false)
+      return
     }
 
-    const toggleReaction = async (postId: string, emoji: string, reacted: boolean) => {
-        if (!user || !activeChannel) return
-
-        if (reacted) {
-            await supabase
-                .from('post_reactions')
-                .delete()
-                .eq('post_id', postId)
-                .eq('user_id', user.id)
-                .eq('emoji', emoji)
-        } else {
-            await supabase.from('post_reactions').insert({
-                post_id: postId,
-                user_id: user.id,
-                emoji,
-            })
-        }
-
-        const loadedPosts = await fetchPosts(activeChannel)
-        setPosts(loadedPosts)
-    }
-
-    if (loading) {
-        return (
-            <>
-                <TopBar title="Comunidade" />
-                <div className="px-4 py-5 space-y-3">
-                    <Skeleton className="h-10 w-full rounded-full" />
-                    {[1, 2, 3].map((item) => <Skeleton key={item} className="h-32 rounded-xl" />)}
-                </div>
-            </>
-        )
-    }
-
-    return (
-        <>
-            <TopBar
-                title="Comunidade"
-                rightContent={
-                    <Button
-                        size="icon"
-                        className="h-9 w-9 rounded-full bg-[var(--color-coreduca-blue)]"
-                        aria-label="Criar post"
-                        onClick={() => setComposerOpen(true)}
-                    >
-                        <Plus className="h-5 w-5 text-white" />
-                    </Button>
-                }
-            />
-
-            <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Novo post</DialogTitle>
-                        <DialogDescription>
-                            Compartilhe uma descoberta, duvida ou recomendacao com a comunidade.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <Textarea
-                        value={postContent}
-                        onChange={(event) => setPostContent(event.target.value)}
-                        className="min-h-32"
-                        placeholder="Escreva seu post..."
-                    />
-                    {error && <p className="text-sm text-red-600">{error}</p>}
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setComposerOpen(false)}>
-                            Cancelar
-                        </Button>
-                        <Button
-                            onClick={handleCreatePost}
-                            disabled={!postContent.trim() || submitting}
-                            className="bg-[var(--color-coreduca-blue)] text-white"
-                        >
-                            {submitting ? 'Publicando...' : 'Publicar'}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <div className="py-3">
-                <ScrollArea className="w-full">
-                    <div className="flex gap-2 px-4 pb-3">
-                        {channels.map((channel) => (
-                            <button
-                                key={channel.id}
-                                onClick={() => setActiveChannel(channel.id)}
-                                className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap transition-all ${activeChannel === channel.id
-                                    ? 'bg-[var(--color-coreduca-blue)] text-white shadow-md shadow-[var(--color-coreduca-blue)]/25'
-                                    : 'bg-secondary text-muted-foreground hover:bg-secondary/80'
-                                    }`}
-                            >
-                                <span>{channel.icone}</span>
-                                {channel.nome}
-                            </button>
-                        ))}
-                    </div>
-                    <ScrollBar orientation="horizontal" />
-                </ScrollArea>
-
-                <div className="px-4 space-y-4 mt-2">
-                    {posts.length === 0 ? (
-                        <Card className="border-0 shadow-sm">
-                            <CardContent className="p-8 text-center text-muted-foreground">
-                                <p className="text-lg">🌱</p>
-                                <p className="text-sm mt-2">Nenhum post neste canal ainda. Seja a primeira!</p>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        posts.map((post, index) => {
-                            const profile = post.profiles
-                            const initials = (profile?.display_name || profile?.username || 'U')
-                                .split(' ')
-                                .map((part) => part[0])
-                                .join('')
-                                .slice(0, 2)
-                                .toUpperCase()
-                            const userReactions = new Set(
-                                (post.post_reactions || [])
-                                    .filter((reaction) => reaction.user_id === user?.id)
-                                    .map((reaction) => reaction.emoji)
-                            )
-
-                            return (
-                                <motion.div
-                                    key={post.id}
-                                    initial={{ opacity: 0, y: 15 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: index * 0.08 }}
-                                >
-                                    <Card className="border-0 shadow-sm">
-                                        <CardContent className="p-4">
-                                            <Link href={`/comunidade/post/${post.id}`} className="block">
-                                                <div className="mb-3 flex items-center gap-3">
-                                                    <Avatar className="h-9 w-9">
-                                                        <AvatarFallback className="bg-[var(--color-coreduca-blue)]/10 text-[var(--color-coreduca-blue)] text-xs font-bold">
-                                                            {initials}
-                                                        </AvatarFallback>
-                                                    </Avatar>
-                                                    <div>
-                                                        <p className="text-sm font-bold">{profile?.display_name || profile?.username}</p>
-                                                        <p className="text-[10px] text-muted-foreground">{timeAgo(post.created_at)}</p>
-                                                    </div>
-                                                </div>
-                                                <p className="text-sm leading-relaxed">{post.conteudo}</p>
-                                            </Link>
-                                            <div className="mt-3 flex items-center gap-3 border-t border-border/50 pt-3">
-                                                <div className="flex items-center gap-1">
-                                                    {communityReactionEmojis.map((emoji) => (
-                                                        <button
-                                                            key={emoji}
-                                                            onClick={() => toggleReaction(post.id, emoji, userReactions.has(emoji))}
-                                                            className={`flex items-center gap-0.5 rounded-full px-2 py-1 text-xs transition-colors ${userReactions.has(emoji)
-                                                                ? 'bg-[var(--color-coreduca-blue)]/10 text-[var(--color-coreduca-blue)]'
-                                                                : 'bg-secondary hover:bg-secondary/80'
-                                                                }`}
-                                                        >
-                                                            <span>{emoji}</span>
-                                                            <span className="font-semibold text-muted-foreground">{post.reacoes?.[emoji] ?? 0}</span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                                <Link href={`/comunidade/post/${post.id}`} className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-                                                    <MessageCircle className="h-3.5 w-3.5" />
-                                                    <span className="font-semibold">{post.total_comentarios}</span>
-                                                </Link>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                </motion.div>
-                            )
-                        })
-                    )}
-                </div>
-            </div>
-        </>
+    const loadedChannels = ((channelsData as CommunityChannel[]) || []).filter((channel) =>
+      normalizeCommunityClubSlug(channel.slug) !== null
     )
+
+    setChannels(loadedChannels)
+
+    const nextSummaryMap: Record<CommunityClubSlug, ClubSummary> = {
+      duvidas: { postCount: 0, latestSnippet: null },
+      fandom: { postCount: 0, latestSnippet: null },
+      vitorias: { postCount: 0, latestSnippet: null },
+    }
+
+    try {
+      const summaryResults = await Promise.all(
+        communityClubOrder.map(async (clubSlug) => {
+          const sourceSlugs = getCommunitySourceSlugs(clubSlug)
+          const clubChannels = loadedChannels.filter((channel) => sourceSlugs.includes(channel.slug))
+
+          if (clubChannels.length === 0) {
+            return [clubSlug, nextSummaryMap[clubSlug]] as const
+          }
+
+          const channelIds = clubChannels.map((channel) => channel.id)
+          const [{ count, error: countError }, { data: latestData, error: latestError }] = await Promise.all([
+            supabase
+              .from('community_posts')
+              .select('id', { count: 'exact', head: true })
+              .in('channel_id', channelIds)
+              .eq('status', 'ativo'),
+            supabase
+              .from('community_posts')
+              .select('conteudo')
+              .in('channel_id', channelIds)
+              .eq('status', 'ativo')
+              .order('created_at', { ascending: false })
+              .limit(1),
+          ])
+
+          if (countError || latestError) {
+            throw new Error('Os clubes foram carregados, mas o resumo das conversas falhou.')
+          }
+
+          return [
+            clubSlug,
+            {
+              postCount: count ?? 0,
+              latestSnippet: latestData?.[0]?.conteudo?.slice(0, CLUB_SUMMARY_LIMIT * 3) ?? null,
+            },
+          ] as const
+        })
+      )
+
+      summaryResults.forEach(([clubSlug, summary]) => {
+        nextSummaryMap[clubSlug] = summary
+      })
+    } catch {
+      setError('Os clubes foram carregados, mas o resumo das conversas falhou.')
+    }
+
+    setSummaryMap(nextSummaryMap)
+    setLoading(false)
+  }, [supabase])
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      void loadCommunityHome()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [loadCommunityHome])
+
+  const handleCreatePost = useCallback(async (payload: CommunityComposerPayload) => {
+    if (!user) return
+
+    setComposerSubmitting(true)
+    setComposerError(null)
+
+    const insertPayload = {
+      user_id: user.id,
+      channel_id: payload.channelId,
+      conteudo: payload.conteudo,
+      post_kind: payload.postKind,
+      prompt_slug: payload.promptSlug,
+      context_type: payload.contextType,
+      context_id: payload.contextId,
+      context_label: payload.contextLabel,
+      context_date: payload.contextDate,
+    }
+
+    let insertError: { message: string } | null = null
+    const { error } = await supabase.from('community_posts').insert(insertPayload)
+    insertError = error ? { message: error.message } : null
+
+    if (insertError && isMissingCommunityColumns(insertError.message)) {
+      const fallback = await supabase.from('community_posts').insert({
+        user_id: user.id,
+        channel_id: payload.channelId,
+        conteudo: payload.conteudo,
+      })
+      insertError = fallback.error ? { message: fallback.error.message } : null
+    }
+
+    setComposerSubmitting(false)
+
+    if (insertError) {
+      setComposerError(insertError.message)
+      return
+    }
+
+    setComposerOpen(false)
+    setSuccessMessage('Compartilhado com sucesso.')
+    setTimeout(() => setSuccessMessage(null), 3000)
+    await loadCommunityHome()
+  }, [loadCommunityHome, supabase, user])
+
+  const recommendedClubSlug = recommendCommunityClub(profile?.interesse_principal)
+  const recommendedClub = communityClubDefinitions[recommendedClubSlug]
+  const interestMeta = getInterestMeta(profile?.interesse_principal)
+  const clubOptions = communityClubOrder
+    .map((clubSlug) => {
+      const sourceSlugs = getCommunitySourceSlugs(clubSlug)
+      const preferredChannel = channels.find((channel) => channel.slug === clubSlug)
+        ?? channels.find((channel) => sourceSlugs.includes(channel.slug))
+
+      if (!preferredChannel) return null
+
+      return { id: preferredChannel.id, slug: clubSlug }
+    })
+    .filter((option): option is { id: string; slug: CommunityClubSlug } => option !== null)
+
+  if (loading) {
+    return (
+      <>
+        <TopBar title="Comunidade" />
+        <div className="space-y-4 px-4 py-5">
+          <Skeleton className="h-44 rounded-3xl" />
+          {[1, 2, 3].map((item) => (
+            <Skeleton key={item} className="h-36 rounded-3xl" />
+          ))}
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <TopBar
+        title="Comunidade"
+        rightContent={
+          <Button
+            size="icon"
+            className="h-9 w-9 rounded-full bg-[var(--color-coreduca-blue)]"
+            aria-label="Compartilhar"
+            onClick={() => setComposerOpen(true)}
+            disabled={clubOptions.length === 0}
+          >
+            <Plus className="h-5 w-5 text-white" />
+          </Button>
+        }
+      />
+
+      <PromptComposerSheet
+        open={composerOpen}
+        onOpenChange={setComposerOpen}
+        clubOptions={clubOptions}
+        defaultClubSlug={recommendedClubSlug}
+        submitLabel="Compartilhar"
+        loading={composerSubmitting}
+        error={composerError}
+        onSubmit={handleCreatePost}
+      />
+
+      <div className="space-y-5 px-4 py-5">
+        {successMessage && (
+          <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
+            {successMessage}
+          </div>
+        )}
+
+        {error && (
+          <Card className="border-0 shadow-sm">
+            <CardContent className="p-4 text-sm text-red-600">{error}</CardContent>
+          </Card>
+        )}
+
+        <CommunityHero recommendedClub={recommendedClub} interestLabel={interestMeta.label} />
+
+        <div className="space-y-3">
+          {communityClubOrder.map((clubSlug) => (
+            <ClubCard
+              key={clubSlug}
+              club={communityClubDefinitions[clubSlug]}
+              href={`/comunidade/${clubSlug}`}
+              recommended={clubSlug === recommendedClubSlug}
+              postCount={summaryMap[clubSlug].postCount}
+              latestSnippet={summaryMap[clubSlug].latestSnippet}
+            />
+          ))}
+        </div>
+      </div>
+    </>
+  )
 }

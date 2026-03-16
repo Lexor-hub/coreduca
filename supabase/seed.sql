@@ -32,12 +32,9 @@ set
 
 insert into public.community_channels (slug, nome, descricao, icone, cor, ordem)
 values
-  ('doramas', 'Doramas', 'Fale sobre seus doramas favoritos', '🎬', '#A855F7', 1),
-  ('kpop', 'K-pop & Cultura', 'Musica, grupos e cultura coreana', '🎵', '#F35B6B', 2),
-  ('iniciantes', 'Iniciantes', 'Espaco seguro para quem esta comecando', '🌱', '#5B7CFA', 3),
-  ('vocabulario', 'Frases e Vocabulario', 'Compartilhe o que aprendeu', '📖', '#FFB347', 4),
-  ('viagem', 'Viagem para Coreia', 'Dicas, roteiros e sonhos de viagem', '✈️', '#5BC8FA', 5),
-  ('novidades', 'Novidades', 'Atualizacoes da plataforma e cultura coreana', '📰', '#5B7CFA', 6)
+  ('duvidas', 'Duvidas sem vergonha', 'Espaco seguro para perguntar sem medo e destravar o coreano.', '🌱', '#5B7CFA', 1),
+  ('fandom', 'Fandom & Eventos', 'Novidades, eventos, wishlist e conversas sobre o universo coreano.', '🎬', '#F35B6B', 2),
+  ('vitorias', 'Vitorias do dia', 'Celebre missao concluida, streak, pronuncia e pequenas conquistas.', '🏆', '#F59E0B', 3)
 on conflict (slug) do update
 set
   nome = excluded.nome,

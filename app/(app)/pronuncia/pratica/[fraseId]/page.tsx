@@ -1,17 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { use, useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Volume2, RotateCcw, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { TopBar } from '@/components/layout/TopBar'
 import { GravadorVoz } from '@/components/pronuncia/GravadorVoz'
 import { ScorePronuncia } from '@/components/pronuncia/ScorePronuncia'
-import { use } from 'react'
 import { useRouter } from 'next/navigation'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/lib/auth-context'
+import { buildCommunityShareHref } from '@/lib/community'
 import type { PronunciationAttempt, PronunciationItem } from '@/types/database'
 
 type PracticeState = 'ready' | 'listening' | 'recording' | 'processing' | 'result'
@@ -20,7 +20,7 @@ export default function PraticaPronunciaPage({ params }: { params: Promise<{ fra
     const resolvedParams = use(params)
     const router = useRouter()
     const { user } = useAuth()
-    const supabase = createBrowserClient()
+    const supabase = useMemo(() => createBrowserClient(), [])
 
     const [item, setItem] = useState<PronunciationItem | null>(null)
     const [audioUrl, setAudioUrl] = useState<string | null>(null)
@@ -284,7 +284,26 @@ export default function PraticaPronunciaPage({ params }: { params: Promise<{ fra
                                 </p>
                             </div>
 
-                            <div className="flex gap-4 w-full max-w-sm mt-8">
+                            <div className="grid w-full max-w-sm gap-3 mt-8">
+                                <Button
+                                    variant="outline"
+                                    className="flex-1 rounded-2xl h-14 font-bold border-2"
+                                    onClick={() => {
+                                        if (!item || !scoreInfo) return
+
+                                        router.push(buildCommunityShareHref({
+                                            clubSlug: 'vitorias',
+                                            postKind: 'vitoria',
+                                            promptSlug: 'consegui-pronunciar',
+                                            contextType: 'pronuncia',
+                                            contextId: item.id,
+                                            contextLabel: item.frase_coreano,
+                                            prefill: `Consegui pronunciar ${item.frase_coreano} com ${scoreInfo.score}% hoje e quis registrar essa conquista.`,
+                                        }))
+                                    }}
+                                >
+                                    Compartilhar
+                                </Button>
                                 <Button
                                     variant="outline"
                                     className="flex-1 rounded-2xl h-14 font-bold border-2"

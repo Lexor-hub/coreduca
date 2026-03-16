@@ -18,6 +18,15 @@ export type QuestionType =
 
 export type MissionStatus = "em_andamento" | "concluida" | "abandonada"
 export type CommunityStatus = "ativo" | "moderado" | "removido"
+export type CommunityPostKind =
+  | "duvida"
+  | "novidade"
+  | "evento"
+  | "grupo_evento"
+  | "quero_ir"
+  | "vitoria"
+  | "livre"
+export type CommunityContextType = "missao" | "pronuncia" | "evento" | "manual"
 
 export type Profile = {
   id: string
@@ -214,6 +223,12 @@ export type CommunityPost = {
   channel_id: string
   conteudo: string
   imagem_url: string | null
+  post_kind: CommunityPostKind
+  prompt_slug: string | null
+  context_type: CommunityContextType | null
+  context_id: string | null
+  context_label: string | null
+  context_date: string | null
   reacoes: Record<string, number> | null
   total_comentarios: number
   pinned: boolean
