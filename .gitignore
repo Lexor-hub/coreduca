@@ -1,5 +1,9 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# ralph agent
+.ralph/
+.ralphrc
+
 # dependencies
 /node_modules
 /.pnp
