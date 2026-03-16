@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Lock, CheckCircle2, ChevronRight } from 'lucide-react'
+import { Lock, CheckCircle2, ChevronRight, BookOpen } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -21,13 +21,18 @@ type UserProgress = {
 
 export default function AprenderPage() {
     const { user, loading: authLoading } = useAuth()
-    const supabase = createBrowserClient()
+    const supabase = useMemo(() => createBrowserClient(), [])
     const [trilhas, setTrilhas] = useState<Trilha[]>([])
     const [progressMap, setProgressMap] = useState<Record<string, UserProgress>>({})
     const [loadingData, setLoadingData] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         if (authLoading) return // Wait for auth to resolve
+        if (!user) {
+            setLoadingData(false)
+            return
+        }
 
         async function fetchData() {
             try {
@@ -38,8 +43,11 @@ export default function AprenderPage() {
                     .eq('ativo', true)
                     .order('ordem')
 
+                console.log('[Aprender] trilhas response:', { trilhasData, trilhasError })
+
                 if (trilhasError) {
                     console.error('Error fetching trilhas:', trilhasError)
+                    setError(`Erro ao carregar trilhas: ${trilhasError.message}`)
                 } else if (trilhasData) {
                     setTrilhas(trilhasData)
                 }
@@ -61,6 +69,7 @@ export default function AprenderPage() {
                 }
             } catch (err) {
                 console.error('Unexpected error in fetchData:', err)
+                setError('Erro inesperado ao carregar dados')
             } finally {
                 setLoadingData(false)
             }
@@ -83,9 +92,40 @@ export default function AprenderPage() {
         )
     }
 
+    if (!user && !authLoading) {
+        return (
+            <>
+                <TopBar title="Aprender" />
+                <div className="flex flex-col items-center justify-center px-4 py-20 text-center">
+                    <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Faca login para acessar as trilhas de aprendizado.</p>
+                </div>
+            </>
+        )
+    }
+
+    if (error) {
+        return (
+            <>
+                <TopBar title="Aprender" />
+                <div className="flex flex-col items-center justify-center px-4 py-20 text-center">
+                    <p className="text-red-500 text-sm">{error}</p>
+                </div>
+            </>
+        )
+    }
+
     return (
         <>
             <TopBar title="Aprender" />
+
+            {trilhas.length === 0 && !loadingData && (
+                <div className="flex flex-col items-center justify-center px-4 py-20 text-center">
+                    <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">Nenhuma trilha disponivel no momento.</p>
+                    <p className="text-xs text-muted-foreground mt-2">Verifique se o seed foi executado no Supabase.</p>
+                </div>
+            )}
 
             <motion.div
                 className="px-4 py-5 space-y-3"
