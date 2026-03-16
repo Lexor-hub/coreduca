@@ -37,11 +37,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const fetchProfile = useCallback(async (userId: string) => {
         await registrarStreak(userId)
-        const { data } = await supabase
+        const { data, error } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', userId)
             .single()
+        if (error) throw error
         setProfile(data)
     }, [supabase, registrarStreak])
 
@@ -50,7 +51,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [user, fetchProfile])
 
     const signOut = useCallback(async () => {
-        await supabase.auth.signOut()
+        const { error } = await supabase.auth.signOut()
+        if (error) throw error
         setUser(null)
         setProfile(null)
     }, [supabase])
@@ -62,12 +64,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             async (_event, session) => {
                 const currentUser = session?.user ?? null
                 setUser(currentUser)
-                if (currentUser) {
-                    await fetchProfile(currentUser.id)
-                } else {
+                try {
+                    if (currentUser) {
+                        await fetchProfile(currentUser.id)
+                    } else {
+                        setProfile(null)
+                    }
+                } catch {
                     setProfile(null)
+                } finally {
+                    setLoading(false)
                 }
-                setLoading(false)
             }
         )
 
