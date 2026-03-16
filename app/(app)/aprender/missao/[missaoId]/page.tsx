@@ -2,7 +2,7 @@
 
 import { useEffect, use, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Loader2, RotateCcw, Sparkles } from 'lucide-react'
+import { ArrowLeft, Loader2, RotateCcw, Sparkles, BookOpen, Flame } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { useRouter } from 'next/navigation'
 import { useQuiz } from '@/hooks/useQuiz'
@@ -202,6 +202,10 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
     const progress = ((indiceAtual + 1) / (questoes.length || 1)) * 100
     const shouldRenderQuestion = estado === 'respondendo' || estado === 'reforco' || estado === 'feedback'
     const isRetryRound = estado === 'reforco' || (estado === 'feedback' && emReforco)
+    const stageLabel = isRetryRound ? 'Reforco' : 'Quiz'
+    const stageDescription = isRetryRound
+        ? 'Revise o que errou e acerte para fechar a missao.'
+        : 'Leia com calma, responda e avance no seu ritmo.'
 
     return (
         <div className="min-h-screen bg-background flex flex-col pt-[max(env(safe-area-inset-top),16px)]">
@@ -230,6 +234,10 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="border-0 bg-amber-100 text-amber-900">
+                            <BookOpen className="mr-1.5 h-3.5 w-3.5" />
+                            {stageLabel}
+                        </Badge>
                         <Badge className="border-0 bg-[var(--color-coreduca-blue)]/10 text-[var(--color-coreduca-blue)]">
                             {questionCount || questoes.length} questoes
                         </Badge>
@@ -258,6 +266,22 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
                         </CardContent>
                     </Card>
                 )}
+
+                <Card className="mb-4 overflow-hidden border-0 bg-[linear-gradient(180deg,#ffffff,rgba(235,243,255,0.72))] shadow-sm">
+                    <CardContent className="flex items-start gap-3 p-4">
+                        <div className={`rounded-2xl p-2 ${isRetryRound ? 'bg-amber-100 text-amber-700' : 'bg-[var(--color-coreduca-blue)]/10 text-[var(--color-coreduca-blue)]'}`}>
+                            {isRetryRound ? <Flame className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+                        </div>
+                        <div>
+                            <p className={`text-xs font-bold uppercase tracking-[0.16em] ${isRetryRound ? 'text-amber-700' : 'text-[var(--color-coreduca-blue)]'}`}>
+                                {stageLabel}
+                            </p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                {stageDescription}
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
 
                 <div className="mb-4 flex items-center justify-between gap-3">
                     <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">

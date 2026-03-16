@@ -3,7 +3,7 @@ import { createBrowserClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Questao, MissaoAttempt } from '@/types/database'
 
-export type EstadoRevisao = 'carregando' | 'vazio' | 'respondendo' | 'feedback' | 'concluido'
+export type EstadoRevisao = 'carregando' | 'vazio' | 'respondendo' | 'feedback' | 'concluido' | 'erro'
 
 type RevisaoResultado = {
     total: number
@@ -20,6 +20,7 @@ export function useRevisao(userId: string) {
     const [resultado, setResultado] = useState<RevisaoResultado | null>(null)
     const [totalQuestoes, setTotalQuestoes] = useState(0)
     const [acertos, setAcertos] = useState(0)
+    const [erro, setErro] = useState<string | null>(null)
 
     const carregar = useCallback(async () => {
         if (!userId) return
@@ -30,77 +31,88 @@ export function useRevisao(userId: string) {
         setSelectedAnswer(null)
         setResultado(null)
         setAcertos(0)
+        setErro(null)
 
         const supabase = supabaseRef.current
 
-        // Fetch completed attempts
-        const { data: attempts } = await supabase
-            .from('missao_attempts')
-            .select('missao_id, respostas')
-            .eq('user_id', userId)
-            .eq('status', 'concluida')
+        try {
+            const { data: attempts, error: attemptsError } = await supabase
+                .from('missao_attempts')
+                .select('missao_id, respostas')
+                .eq('user_id', userId)
+                .eq('status', 'concluida')
 
-        if (!attempts || attempts.length === 0) {
-            setFila([])
-            setTotalQuestoes(0)
-            setEstado('vazio')
-            return
-        }
+            if (attemptsError) {
+                throw attemptsError
+            }
 
-        // Collect question IDs that were answered incorrectly
-        const errorCounts = new Map<string, number>()
-        for (const attempt of attempts as MissaoAttempt[]) {
-            if (!attempt.respostas) continue
-            for (const [qId, answer] of Object.entries(attempt.respostas)) {
-                if (!answer.correta) {
-                    errorCounts.set(qId, (errorCounts.get(qId) || 0) + 1)
+            if (!attempts || attempts.length === 0) {
+                setFila([])
+                setTotalQuestoes(0)
+                setEstado('vazio')
+                return
+            }
+
+            const errorCounts = new Map<string, number>()
+            for (const attempt of attempts as MissaoAttempt[]) {
+                if (!attempt.respostas) continue
+                for (const [qId, answer] of Object.entries(attempt.respostas)) {
+                    if (!answer.correta) {
+                        errorCounts.set(qId, (errorCounts.get(qId) || 0) + 1)
+                    }
                 }
             }
-        }
 
-        if (errorCounts.size === 0) {
-            setFila([])
-            setTotalQuestoes(0)
-            setEstado('vazio')
-            return
-        }
-
-        // Fetch the actual questions
-        const questionIds = Array.from(errorCounts.keys())
-        const { data: questoes } = await supabase
-            .from('questoes')
-            .select('*')
-            .in('id', questionIds)
-            .eq('ativo', true)
-
-        if (!questoes || questoes.length === 0) {
-            setFila([])
-            setTotalQuestoes(0)
-            setEstado('vazio')
-            return
-        }
-
-        // Build weighted queue: more errors = more repetitions (cap 3x)
-        const weighted: Questao[] = []
-        for (const q of questoes as Questao[]) {
-            const count = Math.min(errorCounts.get(q.id) || 1, 3)
-            for (let i = 0; i < count; i++) {
-                weighted.push(q)
+            if (errorCounts.size === 0) {
+                setFila([])
+                setTotalQuestoes(0)
+                setEstado('vazio')
+                return
             }
+
+            const questionIds = Array.from(errorCounts.keys())
+            const { data: questoes, error: questoesError } = await supabase
+                .from('questoes')
+                .select('*')
+                .in('id', questionIds)
+                .eq('ativo', true)
+
+            if (questoesError) {
+                throw questoesError
+            }
+
+            if (!questoes || questoes.length === 0) {
+                setFila([])
+                setTotalQuestoes(0)
+                setEstado('vazio')
+                return
+            }
+
+            const weighted: Questao[] = []
+            for (const q of questoes as Questao[]) {
+                const count = Math.min(errorCounts.get(q.id) || 1, 3)
+                for (let i = 0; i < count; i++) {
+                    weighted.push(q)
+                }
+            }
+
+            for (let i = weighted.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1))
+                ;[weighted[i], weighted[j]] = [weighted[j], weighted[i]]
+            }
+
+            const capped = weighted.slice(0, 15)
+
+            setFila(capped)
+            setTotalQuestoes(capped.length)
+            setEstado('respondendo')
+        } catch (error) {
+            console.error('Erro ao carregar revisao', error)
+            setFila([])
+            setTotalQuestoes(0)
+            setErro('Nao foi possivel carregar sua revisao agora.')
+            setEstado('erro')
         }
-
-        // Shuffle
-        for (let i = weighted.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [weighted[i], weighted[j]] = [weighted[j], weighted[i]]
-        }
-
-        // Cap at 15 questions per session
-        const capped = weighted.slice(0, 15)
-
-        setFila(capped)
-        setTotalQuestoes(capped.length)
-        setEstado('respondendo')
     }, [userId])
 
     const responder = useCallback((questaoId: string, respostaUsuario: string) => {
@@ -144,11 +156,12 @@ export function useRevisao(userId: string) {
         estado,
         questaoAtual,
         indiceAtual,
-        totalQuestoes: fila.length,
+        totalQuestoes,
         ultimaRespostaCorreta,
         selectedAnswer,
         resultado,
         acertos,
+        erro,
         carregar,
         responder,
         avancar,

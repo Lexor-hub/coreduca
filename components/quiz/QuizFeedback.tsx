@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, XCircle } from 'lucide-react'
+import { CheckCircle, XCircle, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface QuizFeedbackProps {
@@ -14,6 +14,14 @@ interface QuizFeedbackProps {
 }
 
 export function QuizFeedback({ show, isCorrect, correctAnswer, explanation, isRetryRound = false, onAvancar }: QuizFeedbackProps) {
+    const buttonLabel = isRetryRound
+        ? isCorrect
+            ? 'Seguir no reforco'
+            : 'Tentar de novo'
+        : isCorrect
+            ? 'Continuar'
+            : 'Entendi, proxima'
+
     return (
         <AnimatePresence>
             {show && isCorrect !== null && (
@@ -59,7 +67,8 @@ export function QuizFeedback({ show, isCorrect, correctAnswer, explanation, isRe
                                     : 'bg-red-600 hover:bg-red-700'
                             }`}
                         >
-                            Proxima
+                            {buttonLabel}
+                            <ArrowRight className="ml-2 h-4 w-4" />
                         </Button>
                     </div>
                 </motion.div>

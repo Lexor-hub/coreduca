@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, ChevronRight, BookOpen } from 'lucide-react'
+import { ChevronLeft, ChevronRight, BookOpen, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import type { Questao } from '@/types/database'
 
 interface MiniLicaoProps {
@@ -15,6 +17,42 @@ type VocabItem = {
     coreano: string
     romanizacao: string | null
     significado: string
+    contexto: string
+}
+
+function extractQuotedText(text: string) {
+    const quotedMatch = text.match(/"([^"]+)"/)
+    return quotedMatch?.[1] ?? null
+}
+
+function isMostlyHangul(text: string) {
+    const cleaned = text.replace(/\s+/g, '')
+    if (!cleaned) return false
+
+    const hangulChars = Array.from(cleaned).filter((char) => /[가-힣]/.test(char)).length
+    return hangulChars / cleaned.length > 0.5
+}
+
+function deriveMeaning(questao: Questao) {
+    const quoted = extractQuotedText(questao.enunciado)
+
+    if (questao.tipo === 'coreano_para_portugues') {
+        return questao.resposta_correta
+    }
+
+    if (questao.tipo === 'portugues_para_coreano' && quoted) {
+        return quoted
+    }
+
+    if (quoted) {
+        return quoted
+    }
+
+    if (!isMostlyHangul(questao.resposta_correta)) {
+        return questao.resposta_correta
+    }
+
+    return questao.enunciado
 }
 
 function extrairVocabulario(questoes: Questao[]): VocabItem[] {
@@ -38,7 +76,8 @@ function extrairVocabulario(questoes: Questao[]): VocabItem[] {
         items.push({
             coreano,
             romanizacao,
-            significado: q.resposta_correta,
+            significado: deriveMeaning(q),
+            contexto: q.enunciado,
         })
     }
 
@@ -65,18 +104,39 @@ export function MiniLicao({ questoes, onComecar }: MiniLicaoProps) {
     const item = vocab[index]
 
     return (
-        <div className="flex flex-col items-center gap-6 w-full">
-            <div className="text-center space-y-1">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                    <BookOpen className="h-5 w-5 text-[var(--color-coreduca-blue)]" />
-                    <p className="text-sm font-bold text-[var(--color-coreduca-blue)]">Mini-licao</p>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                    Estude o vocabulario antes de comecar
-                </p>
-            </div>
+        <div className="flex w-full flex-col items-center gap-6">
+            <Card className="w-full overflow-hidden border-0 bg-[linear-gradient(135deg,rgba(19,32,52,1),rgba(25,92,255,0.92))] text-white shadow-xl">
+                <CardContent className="space-y-4 p-6">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <BookOpen className="h-5 w-5" />
+                                <p className="text-sm font-bold uppercase tracking-[0.18em] text-white/80">Mini-licao</p>
+                            </div>
+                            <h2 className="text-2xl font-black leading-tight">Aquecimento antes do quiz</h2>
+                            <p className="max-w-xs text-sm text-white/75">
+                                Passe pelas palavras-chave da missao e entre no quiz com o ouvido e o vocabulario ativados.
+                            </p>
+                        </div>
+                        <div className="rounded-3xl bg-white/12 p-4 text-center backdrop-blur">
+                            <p className="text-3xl font-black">{index + 1}</p>
+                            <p className="text-xs uppercase tracking-[0.18em] text-white/70">de {vocab.length}</p>
+                        </div>
+                    </div>
 
-            <div className="w-full relative min-h-[200px]">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="border-0 bg-white/12 text-white">
+                            <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                            Vocabulario essencial
+                        </Badge>
+                        <Badge className="border-0 bg-white/12 text-white">
+                            Passe rapido antes de responder
+                        </Badge>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <div className="w-full relative min-h-[280px]">
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={index}
@@ -84,8 +144,11 @@ export function MiniLicao({ questoes, onComecar }: MiniLicaoProps) {
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -40 }}
                         transition={{ duration: 0.2 }}
-                        className="bg-white rounded-3xl border-2 border-[var(--color-coreduca-blue)]/20 shadow-lg p-8 text-center space-y-4"
+                        className="space-y-5 rounded-[2rem] border border-[var(--color-coreduca-blue)]/15 bg-[linear-gradient(180deg,#ffffff,rgba(235,243,255,0.72))] p-8 text-center shadow-[0_24px_60px_rgba(19,32,52,0.12)]"
                     >
+                        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-coreduca-blue)]/10 text-[var(--color-coreduca-blue)]">
+                            <BookOpen className="h-5 w-5" />
+                        </div>
                         <p className="text-4xl font-black text-[var(--color-coreduca-blue)] tracking-wide">
                             {item.coreano}
                         </p>
@@ -94,15 +157,17 @@ export function MiniLicao({ questoes, onComecar }: MiniLicaoProps) {
                                 ({item.romanizacao})
                             </p>
                         )}
-                        <div className="h-px bg-border w-16 mx-auto" />
+                        <div className="mx-auto h-px w-16 bg-border" />
                         <p className="text-lg font-semibold text-foreground">
                             {item.significado}
+                        </p>
+                        <p className="mx-auto max-w-sm text-sm leading-relaxed text-muted-foreground">
+                            {item.contexto}
                         </p>
                     </motion.div>
                 </AnimatePresence>
             </div>
 
-            {/* Navigation */}
             <div className="flex items-center gap-4">
                 <button
                     onClick={() => setIndex(Math.max(0, index - 1))}
@@ -137,7 +202,7 @@ export function MiniLicao({ questoes, onComecar }: MiniLicaoProps) {
 
             <Button
                 onClick={onComecar}
-                className="rounded-full px-8 w-full max-w-xs"
+                className="w-full max-w-xs rounded-full px-8"
             >
                 Comecar Quiz
             </Button>
