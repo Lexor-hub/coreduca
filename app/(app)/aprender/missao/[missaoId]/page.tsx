@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, use, useState } from 'react'
+import { useEffect, use, useMemo, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { ArrowLeft, Loader2, RotateCcw, Sparkles, BookOpen, Flame } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
@@ -25,7 +25,7 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
     const router = useRouter()
     const { user, loading: authLoading } = useAuth()
     const userId = user?.id ?? null
-    const supabase = createBrowserClient()
+    const supabase = useMemo(() => createBrowserClient(), [])
     const [missao, setMissao] = useState<MissaoMeta | null>(null)
     const [trilha, setTrilha] = useState<TrilhaMeta | null>(null)
     const [questionCount, setQuestionCount] = useState(0)
@@ -41,6 +41,7 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
         selectedAnswer,
         resultado,
         erro,
+        proximaAcao,
         iniciar,
         comecarQuiz,
         responder,
@@ -312,6 +313,7 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
                 correctAnswer={questao.resposta_correta}
                 explanation={questao.explicacao}
                 isRetryRound={isRetryRound}
+                nextStep={proximaAcao}
                 onAvancar={avancar}
             />
         </div>

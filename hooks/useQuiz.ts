@@ -3,6 +3,7 @@ import { createBrowserClient } from '@/lib/supabase/client'
 import type { Questao, QuizAnswers, QuizCompletionResult } from '@/types/database'
 
 export type EstadoQuiz = 'carregando' | 'mini_licao' | 'respondendo' | 'feedback' | 'reforco' | 'concluido' | 'erro'
+export type QuizNextStep = 'iniciar_quiz' | 'proxima_questao' | 'reforco' | 'seguir_reforco' | 'repetir_reforco' | 'conclusao'
 
 export function useQuiz(missaoId: string, userId: string) {
     const supabaseRef = useRef(createBrowserClient())
@@ -16,12 +17,33 @@ export function useQuiz(missaoId: string, userId: string) {
     const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
     const [resultado, setResultado] = useState<QuizCompletionResult | null>(null)
     const [erro, setErro] = useState<string | null>(null)
-    // For reforço: track the queue of questions that need to be answered correctly
     const [filaReforco, setFilaReforco] = useState<Questao[]>([])
     const [emReforco, setEmReforco] = useState(false)
-    // Ref to always have latest respostas in avancar() without stale closure
-    const respostasRef = useRef(respostas)
-    useEffect(() => { respostasRef.current = respostas }, [respostas])
+    const quizStateRef = useRef({
+        estado,
+        questoes,
+        todasQuestoes,
+        indiceAtual,
+        errosPendentes,
+        respostas,
+        ultimaRespostaCorreta,
+        filaReforco,
+        emReforco,
+    })
+
+    useEffect(() => {
+        quizStateRef.current = {
+            estado,
+            questoes,
+            todasQuestoes,
+            indiceAtual,
+            errosPendentes,
+            respostas,
+            ultimaRespostaCorreta,
+            filaReforco,
+            emReforco,
+        }
+    }, [emReforco, errosPendentes, estado, filaReforco, indiceAtual, questoes, respostas, todasQuestoes, ultimaRespostaCorreta])
 
     const concluir = useCallback(async (finalResponses: QuizAnswers) => {
         if (!userId || !missaoId) return
@@ -61,7 +83,6 @@ export function useQuiz(missaoId: string, userId: string) {
         }
     }, [missaoId, userId])
 
-    // Carregar questões
     const iniciar = useCallback(async () => {
         setEstado('carregando')
         setIndiceAtual(0)
@@ -109,17 +130,16 @@ export function useQuiz(missaoId: string, userId: string) {
         }
     }, [missaoId])
 
-    // Transition from mini-lesson to quiz
     const comecarQuiz = useCallback(() => {
         setEstado('respondendo')
     }, [])
 
-    // Responder questão — only sets feedback state, does NOT auto-advance
     const responder = useCallback((questaoId: string, respostaUsuario: string) => {
-        const questao = questoes.find(q => q.id === questaoId)
-        if (!questao || estado === 'feedback') return
+        const snapshot = quizStateRef.current
+        const questao = snapshot.questoes.find((currentQuestion) => currentQuestion.id === questaoId)
 
-        // For completar_frase, normalize comparison
+        if (!questao || snapshot.estado === 'feedback') return
+
         let correta: boolean
         if (questao.tipo === 'completar_frase') {
             const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
@@ -128,40 +148,51 @@ export function useQuiz(missaoId: string, userId: string) {
             correta = respostaUsuario === questao.resposta_correta
         }
 
-        const respostasAtualizadas: QuizAnswers = { ...respostas, [questaoId]: { resposta: respostaUsuario, correta } }
+        const respostasAtualizadas: QuizAnswers = {
+            ...snapshot.respostas,
+            [questaoId]: { resposta: respostaUsuario, correta },
+        }
         const errosAtualizados = correta
-            ? errosPendentes.filter((id) => id !== questaoId)
-            : Array.from(new Set([...errosPendentes, questaoId]))
+            ? snapshot.errosPendentes.filter((id) => id !== questaoId)
+            : Array.from(new Set([...snapshot.errosPendentes, questaoId]))
 
         setSelectedAnswer(respostaUsuario)
         setUltimaRespostaCorreta(correta)
         setRespostas(respostasAtualizadas)
         setErrosPendentes(errosAtualizados)
         setEstado('feedback')
-    }, [estado, errosPendentes, questoes, respostas])
+    }, [])
 
-    // Manual advance — called when user clicks "Próxima"
     const avancar = useCallback(async () => {
-        const wasCorrect = ultimaRespostaCorreta
+        const snapshot = quizStateRef.current
+        const wasCorrect = snapshot.ultimaRespostaCorreta
+
         setSelectedAnswer(null)
         setUltimaRespostaCorreta(null)
 
-        // If in reforço mode
-        if (filaReforco.length > 0) {
+        if (snapshot.emReforco) {
+            const filaAtual = snapshot.filaReforco
+
+            if (filaAtual.length === 0) {
+                setEmReforco(false)
+                await concluir(snapshot.respostas)
+                return
+            }
+
             if (wasCorrect) {
-                // Remove current question from queue
-                const novaFila = filaReforco.slice(1)
+                const novaFila = filaAtual.slice(1)
                 setFilaReforco(novaFila)
+
                 if (novaFila.length === 0) {
                     setEmReforco(false)
-                    await concluir(respostasRef.current)
+                    await concluir(snapshot.respostas)
                     return
                 }
+
                 setQuestoes(novaFila)
                 setIndiceAtual(0)
             } else {
-                // Rotate: move current question to the end
-                const novaFila = [...filaReforco.slice(1), filaReforco[0]]
+                const novaFila = [...filaAtual.slice(1), filaAtual[0]]
                 setFilaReforco(novaFila)
                 setQuestoes(novaFila)
                 setIndiceAtual(0)
@@ -170,18 +201,16 @@ export function useQuiz(missaoId: string, userId: string) {
             return
         }
 
-        // Normal flow
-        const proximoIndice = indiceAtual + 1
+        const proximoIndice = snapshot.indiceAtual + 1
 
-        if (proximoIndice < questoes.length) {
+        if (proximoIndice < snapshot.questoes.length) {
             setIndiceAtual(proximoIndice)
             setEstado('respondendo')
             return
         }
 
-        // End of first pass — check for errors
-        if (errosPendentes.length > 0) {
-            const questoesReforco = todasQuestoes.filter((q) => errosPendentes.includes(q.id))
+        if (snapshot.errosPendentes.length > 0) {
+            const questoesReforco = snapshot.todasQuestoes.filter((q) => snapshot.errosPendentes.includes(q.id))
             setFilaReforco(questoesReforco)
             setQuestoes(questoesReforco)
             setIndiceAtual(0)
@@ -191,12 +220,32 @@ export function useQuiz(missaoId: string, userId: string) {
             return
         }
 
-        await concluir(respostasRef.current)
-    }, [concluir, errosPendentes, filaReforco, indiceAtual, questoes, todasQuestoes, ultimaRespostaCorreta])
+        await concluir(snapshot.respostas)
+    }, [concluir])
+
+    let proximaAcao: QuizNextStep | null = null
+
+    if (estado === 'mini_licao') {
+        proximaAcao = 'iniciar_quiz'
+    } else if (estado === 'feedback') {
+        if (emReforco) {
+            if (ultimaRespostaCorreta) {
+                proximaAcao = filaReforco.length <= 1 ? 'conclusao' : 'seguir_reforco'
+            } else {
+                proximaAcao = 'repetir_reforco'
+            }
+        } else if (indiceAtual + 1 < questoes.length) {
+            proximaAcao = 'proxima_questao'
+        } else if (errosPendentes.length > 0) {
+            proximaAcao = 'reforco'
+        } else {
+            proximaAcao = 'conclusao'
+        }
+    }
 
     return {
         estado, questoes, todasQuestoes, indiceAtual, errosPendentes, emReforco,
-        ultimaRespostaCorreta, selectedAnswer, resultado, erro,
+        ultimaRespostaCorreta, selectedAnswer, resultado, erro, proximaAcao,
         iniciar, comecarQuiz, responder, avancar
     }
 }

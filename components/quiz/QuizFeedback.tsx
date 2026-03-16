@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, XCircle, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import type { QuizNextStep } from '@/hooks/useQuiz'
 
 interface QuizFeedbackProps {
     show: boolean
@@ -10,17 +11,28 @@ interface QuizFeedbackProps {
     correctAnswer?: string
     explanation?: string | null
     isRetryRound?: boolean
+    nextStep?: QuizNextStep | null
     onAvancar: () => void
 }
 
-export function QuizFeedback({ show, isCorrect, correctAnswer, explanation, isRetryRound = false, onAvancar }: QuizFeedbackProps) {
-    const buttonLabel = isRetryRound
+export function QuizFeedback({ show, isCorrect, correctAnswer, explanation, isRetryRound = false, nextStep, onAvancar }: QuizFeedbackProps) {
+    let buttonLabel = isRetryRound
         ? isCorrect
             ? 'Seguir no reforco'
             : 'Tentar de novo'
         : isCorrect
             ? 'Continuar'
             : 'Entendi, proxima'
+
+    if (nextStep === 'reforco') {
+        buttonLabel = 'Ir para o reforco'
+    } else if (nextStep === 'conclusao') {
+        buttonLabel = 'Ver resultado'
+    } else if (nextStep === 'seguir_reforco') {
+        buttonLabel = 'Seguir no reforco'
+    } else if (nextStep === 'repetir_reforco') {
+        buttonLabel = 'Tentar de novo'
+    }
 
     return (
         <AnimatePresence>

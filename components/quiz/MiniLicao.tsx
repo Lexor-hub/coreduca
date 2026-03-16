@@ -102,6 +102,7 @@ export function MiniLicao({ questoes, onComecar }: MiniLicaoProps) {
     }
 
     const item = vocab[index]
+    const isLastCard = index === vocab.length - 1
 
     return (
         <div className="flex w-full flex-col items-center gap-6">
@@ -200,12 +201,19 @@ export function MiniLicao({ questoes, onComecar }: MiniLicaoProps) {
                 </button>
             </div>
 
-            <Button
-                onClick={onComecar}
-                className="w-full max-w-xs rounded-full px-8"
-            >
-                Comecar Quiz
-            </Button>
+            <div className="flex w-full max-w-xs flex-col gap-2">
+                <Button
+                    onClick={isLastCard ? onComecar : () => setIndex((current) => Math.min(vocab.length - 1, current + 1))}
+                    className="w-full rounded-full px-8"
+                >
+                    {isLastCard ? 'Comecar Quiz' : 'Proxima palavra'}
+                </Button>
+                {!isLastCard && (
+                    <Button onClick={onComecar} variant="ghost" className="w-full rounded-full text-muted-foreground">
+                        Pular aquecimento
+                    </Button>
+                )}
+            </div>
         </div>
     )
 }
