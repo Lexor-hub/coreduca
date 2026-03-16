@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, XCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 interface QuizFeedbackProps {
     show: boolean
@@ -9,9 +10,10 @@ interface QuizFeedbackProps {
     correctAnswer?: string
     explanation?: string | null
     isRetryRound?: boolean
+    onAvancar: () => void
 }
 
-export function QuizFeedback({ show, isCorrect, correctAnswer, explanation, isRetryRound = false }: QuizFeedbackProps) {
+export function QuizFeedback({ show, isCorrect, correctAnswer, explanation, isRetryRound = false, onAvancar }: QuizFeedbackProps) {
     return (
         <AnimatePresence>
             {show && isCorrect !== null && (
@@ -23,30 +25,42 @@ export function QuizFeedback({ show, isCorrect, correctAnswer, explanation, isRe
                     className={`fixed bottom-0 left-0 right-0 p-6 safe-area-bottom rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-50 ${isCorrect ? 'bg-green-100' : 'bg-red-100'
                         }`}
                 >
-                    <div className="max-w-lg mx-auto flex items-start gap-4">
-                        <div className={`mt-1 rounded-full bg-white p-1 shadow-sm ${isCorrect ? 'text-green-600' : 'text-red-600'}`}>
-                            {isCorrect ? <CheckCircle className="w-8 h-8" /> : <XCircle className="w-8 h-8" />}
+                    <div className="max-w-lg mx-auto flex flex-col gap-4">
+                        <div className="flex items-start gap-4">
+                            <div className={`mt-1 rounded-full bg-white p-1 shadow-sm ${isCorrect ? 'text-green-600' : 'text-red-600'}`}>
+                                {isCorrect ? <CheckCircle className="w-8 h-8" /> : <XCircle className="w-8 h-8" />}
+                            </div>
+                            <div className="flex-1">
+                                <h3 className={`text-xl font-black mb-1 ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>
+                                    {isCorrect ? 'Incrivel!' : 'Quase la!'}
+                                </h3>
+                                {isRetryRound && (
+                                    <p className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-700">
+                                        Rodada de reforco
+                                    </p>
+                                )}
+                                {!isCorrect && correctAnswer && (
+                                    <p className="text-red-900 font-medium">
+                                        A resposta correta e: <span className="font-extrabold">{correctAnswer}</span>
+                                    </p>
+                                )}
+                                {explanation && (
+                                    <p className={`mt-2 text-sm leading-relaxed ${isCorrect ? 'text-green-900' : 'text-red-900'}`}>
+                                        {explanation}
+                                    </p>
+                                )}
+                            </div>
                         </div>
-                        <div className="flex-1">
-                            <h3 className={`text-xl font-black mb-1 ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>
-                                {isCorrect ? 'Incrível!' : 'Quase lá!'}
-                            </h3>
-                            {isRetryRound && (
-                                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-700">
-                                    Rodada de reforco
-                                </p>
-                            )}
-                            {!isCorrect && correctAnswer && (
-                                <p className="text-red-900 font-medium">
-                                    A resposta correta é: <span className="font-extrabold">{correctAnswer}</span>
-                                </p>
-                            )}
-                            {explanation && (
-                                <p className={`mt-2 text-sm leading-relaxed ${isCorrect ? 'text-green-900' : 'text-red-900'}`}>
-                                    {explanation}
-                                </p>
-                            )}
-                        </div>
+                        <Button
+                            onClick={onAvancar}
+                            className={`w-full rounded-full text-white font-bold ${
+                                isCorrect
+                                    ? 'bg-green-600 hover:bg-green-700'
+                                    : 'bg-red-600 hover:bg-red-700'
+                            }`}
+                        >
+                            Proxima
+                        </Button>
                     </div>
                 </motion.div>
             )}

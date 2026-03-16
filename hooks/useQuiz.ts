@@ -1,8 +1,8 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { createBrowserClient } from '@/lib/supabase/client'
 import type { Questao, QuizAnswers, QuizCompletionResult } from '@/types/database'
 
-export type EstadoQuiz = 'carregando' | 'respondendo' | 'feedback' | 'reforco' | 'concluido' | 'erro'
+export type EstadoQuiz = 'carregando' | 'mini_licao' | 'respondendo' | 'feedback' | 'reforco' | 'concluido' | 'erro'
 
 export function useQuiz(missaoId: string, userId: string) {
     const supabaseRef = useRef(createBrowserClient())
@@ -16,6 +16,12 @@ export function useQuiz(missaoId: string, userId: string) {
     const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
     const [resultado, setResultado] = useState<QuizCompletionResult | null>(null)
     const [erro, setErro] = useState<string | null>(null)
+    // For reforço: track the queue of questions that need to be answered correctly
+    const [filaReforco, setFilaReforco] = useState<Questao[]>([])
+    const [emReforco, setEmReforco] = useState(false)
+    // Ref to always have latest respostas in avancar() without stale closure
+    const respostasRef = useRef(respostas)
+    useEffect(() => { respostasRef.current = respostas }, [respostas])
 
     const concluir = useCallback(async (finalResponses: QuizAnswers) => {
         if (!userId || !missaoId) return
@@ -65,6 +71,8 @@ export function useQuiz(missaoId: string, userId: string) {
         setSelectedAnswer(null)
         setResultado(null)
         setErro(null)
+        setFilaReforco([])
+        setEmReforco(false)
 
         const { data, error } = await supabaseRef.current
             .from('questoes')
@@ -87,7 +95,7 @@ export function useQuiz(missaoId: string, userId: string) {
         setQuestoes(loadedQuestions)
 
         if (loadedQuestions.length > 0) {
-            setEstado('respondendo')
+            setEstado('mini_licao')
         } else {
             setResultado({
                 score: 0,
@@ -101,48 +109,94 @@ export function useQuiz(missaoId: string, userId: string) {
         }
     }, [missaoId])
 
-    // Responder questão
-    const responder = useCallback(async (questaoId: string, resposta: string) => {
+    // Transition from mini-lesson to quiz
+    const comecarQuiz = useCallback(() => {
+        setEstado('respondendo')
+    }, [])
+
+    // Responder questão — only sets feedback state, does NOT auto-advance
+    const responder = useCallback((questaoId: string, respostaUsuario: string) => {
         const questao = questoes.find(q => q.id === questaoId)
         if (!questao || estado === 'feedback') return
 
-        const correta = resposta === questao.resposta_correta
-        const respostasAtualizadas: QuizAnswers = { ...respostas, [questaoId]: { resposta, correta } }
+        // For completar_frase, normalize comparison
+        let correta: boolean
+        if (questao.tipo === 'completar_frase') {
+            const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
+            correta = normalize(respostaUsuario) === normalize(questao.resposta_correta)
+        } else {
+            correta = respostaUsuario === questao.resposta_correta
+        }
+
+        const respostasAtualizadas: QuizAnswers = { ...respostas, [questaoId]: { resposta: respostaUsuario, correta } }
         const errosAtualizados = correta
             ? errosPendentes.filter((id) => id !== questaoId)
             : Array.from(new Set([...errosPendentes, questaoId]))
 
-        setSelectedAnswer(resposta)
+        setSelectedAnswer(respostaUsuario)
         setUltimaRespostaCorreta(correta)
         setRespostas(respostasAtualizadas)
         setErrosPendentes(errosAtualizados)
         setEstado('feedback')
+    }, [estado, errosPendentes, questoes, respostas])
 
-        setTimeout(async () => {
-            setSelectedAnswer(null)
-            setUltimaRespostaCorreta(null)
-            const proximoIndice = indiceAtual + 1
+    // Manual advance — called when user clicks "Próxima"
+    const avancar = useCallback(async () => {
+        const wasCorrect = ultimaRespostaCorreta
+        setSelectedAnswer(null)
+        setUltimaRespostaCorreta(null)
 
-            if (proximoIndice < questoes.length) {
-                setIndiceAtual(proximoIndice)
-                setEstado('respondendo')
-                return
-            }
-
-            if (errosAtualizados.length > 0) {
-                setQuestoes(todasQuestoes.filter((currentQuestion) => errosAtualizados.includes(currentQuestion.id)))
+        // If in reforço mode
+        if (filaReforco.length > 0) {
+            if (wasCorrect) {
+                // Remove current question from queue
+                const novaFila = filaReforco.slice(1)
+                setFilaReforco(novaFila)
+                if (novaFila.length === 0) {
+                    setEmReforco(false)
+                    await concluir(respostasRef.current)
+                    return
+                }
+                setQuestoes(novaFila)
                 setIndiceAtual(0)
-                setErrosPendentes([])
-                setEstado('reforco')
-                return
+            } else {
+                // Rotate: move current question to the end
+                const novaFila = [...filaReforco.slice(1), filaReforco[0]]
+                setFilaReforco(novaFila)
+                setQuestoes(novaFila)
+                setIndiceAtual(0)
             }
+            setEstado('reforco')
+            return
+        }
 
-            await concluir(respostasAtualizadas)
-        }, 1200)
-    }, [concluir, estado, errosPendentes, indiceAtual, questoes, respostas, todasQuestoes])
+        // Normal flow
+        const proximoIndice = indiceAtual + 1
+
+        if (proximoIndice < questoes.length) {
+            setIndiceAtual(proximoIndice)
+            setEstado('respondendo')
+            return
+        }
+
+        // End of first pass — check for errors
+        if (errosPendentes.length > 0) {
+            const questoesReforco = todasQuestoes.filter((q) => errosPendentes.includes(q.id))
+            setFilaReforco(questoesReforco)
+            setQuestoes(questoesReforco)
+            setIndiceAtual(0)
+            setErrosPendentes([])
+            setEmReforco(true)
+            setEstado('reforco')
+            return
+        }
+
+        await concluir(respostasRef.current)
+    }, [concluir, errosPendentes, filaReforco, indiceAtual, questoes, todasQuestoes, ultimaRespostaCorreta])
 
     return {
-        estado, questoes, indiceAtual, errosPendentes,
-        ultimaRespostaCorreta, selectedAnswer, resultado, erro, iniciar, responder
+        estado, questoes, todasQuestoes, indiceAtual, errosPendentes, emReforco,
+        ultimaRespostaCorreta, selectedAnswer, resultado, erro,
+        iniciar, comecarQuiz, responder, avancar
     }
 }

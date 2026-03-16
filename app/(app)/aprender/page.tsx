@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Lock, CheckCircle2, ChevronRight, BookOpen } from 'lucide-react'
+import { Lock, CheckCircle2, ChevronRight, BookOpen, RotateCcw } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TopBar } from '@/components/layout/TopBar'
 import { useAuth } from '@/lib/auth-context'
 import { createBrowserClient } from '@/lib/supabase/client'
+import { contarRevisaoPendente } from '@/hooks/useRevisao'
 import Link from 'next/link'
 import type { Trilha } from '@/types/database'
 
@@ -27,6 +28,7 @@ export default function AprenderPage() {
     const [loadingData, setLoadingData] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [warning, setWarning] = useState<string | null>(null)
+    const [revisaoCount, setRevisaoCount] = useState(0)
 
     useEffect(() => {
         if (authLoading) return // Wait for auth to resolve
@@ -77,6 +79,10 @@ export default function AprenderPage() {
                 } else {
                     setProgressMap({})
                 }
+
+                // Count pending review questions
+                const count = await contarRevisaoPendente(currentUserId, supabase)
+                setRevisaoCount(count)
             } catch (err) {
                 console.error('Unexpected error in fetchData:', err)
                 setError('Erro inesperado ao carregar dados')
@@ -144,6 +150,27 @@ export default function AprenderPage() {
                     <BookOpen className="h-12 w-12 text-muted-foreground mb-4" />
                     <p className="text-muted-foreground">Nenhuma trilha disponivel no momento.</p>
                     <p className="text-xs text-muted-foreground mt-2">Verifique se o seed foi executado no Supabase.</p>
+                </div>
+            )}
+
+            {revisaoCount > 0 && (
+                <div className="px-4 pt-5">
+                    <Link href="/aprender/revisao">
+                        <Card className="border-0 shadow-md bg-amber-50 hover:shadow-lg cursor-pointer transition-all">
+                            <CardContent className="p-4 flex items-center gap-4">
+                                <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-amber-100 shadow-sm">
+                                    <RotateCcw className="h-6 w-6 text-amber-600" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-bold text-sm">Revisao Diaria</p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                        {revisaoCount} {revisaoCount === 1 ? 'questao' : 'questoes'} para revisar
+                                    </p>
+                                </div>
+                                <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                            </CardContent>
+                        </Card>
+                    </Link>
                 </div>
             )}
 

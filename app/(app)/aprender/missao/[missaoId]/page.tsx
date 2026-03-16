@@ -9,6 +9,7 @@ import { useQuiz } from '@/hooks/useQuiz'
 import { QuizCard } from '@/components/quiz/QuizCard'
 import { QuizFeedback } from '@/components/quiz/QuizFeedback'
 import { QuizResultado } from '@/components/quiz/QuizResultado'
+import { MiniLicao } from '@/components/quiz/MiniLicao'
 import { useAuth } from '@/lib/auth-context'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
@@ -33,13 +34,17 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
     const {
         estado,
         questoes,
+        todasQuestoes,
         indiceAtual,
+        emReforco,
         ultimaRespostaCorreta,
         selectedAnswer,
         resultado,
         erro,
         iniciar,
+        comecarQuiz,
         responder,
+        avancar,
     } = useQuiz(resolvedParams.missaoId, userId || '')
 
     useEffect(() => {
@@ -161,12 +166,34 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
         )
     }
 
+    // Mini-lesson screen
+    if (estado === 'mini_licao') {
+        return (
+            <div className="min-h-screen bg-background flex flex-col pt-[max(env(safe-area-inset-top),16px)]">
+                <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl border-b border-border/50 px-4 py-3">
+                    <div className="max-w-lg mx-auto flex items-center gap-4">
+                        <button onClick={() => router.push(returnHref)} className="text-muted-foreground hover:text-foreground">
+                            <ArrowLeft className="h-6 w-6" />
+                        </button>
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold">{missao?.titulo || 'Missao'}</p>
+                            <p className="truncate text-xs text-muted-foreground">{trilha?.titulo || 'Aprender'}</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="flex-1 flex flex-col max-w-lg mx-auto w-full p-4 pt-8">
+                    <MiniLicao questoes={todasQuestoes} onComecar={comecarQuiz} />
+                </div>
+            </div>
+        )
+    }
+
     const questao = questoes[indiceAtual]
 
     if (!questao) {
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-                <p className="text-muted-foreground">Nenhuma questão encontrada nesta missão.</p>
+                <p className="text-muted-foreground">Nenhuma questao encontrada nesta missao.</p>
                 <button onClick={() => router.push(returnHref)} className="mt-4 text-blue-500 font-bold">Voltar</button>
             </div>
         )
@@ -174,7 +201,7 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
 
     const progress = ((indiceAtual + 1) / (questoes.length || 1)) * 100
     const shouldRenderQuestion = estado === 'respondendo' || estado === 'reforco' || estado === 'feedback'
-    const isRetryRound = estado === 'reforco'
+    const isRetryRound = estado === 'reforco' || (estado === 'feedback' && emReforco)
 
     return (
         <div className="min-h-screen bg-background flex flex-col pt-[max(env(safe-area-inset-top),16px)]">
@@ -237,14 +264,14 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
                         Pergunta {indiceAtual + 1}
                     </p>
                     <p className="text-right text-xs text-muted-foreground">
-                        {isRetryRound ? 'Revise os erros antes de concluir.' : 'Responda para avancar.'}
+                        {isRetryRound ? 'Acerte para avancar.' : 'Responda para avancar.'}
                     </p>
                 </div>
 
                 <AnimatePresence mode="wait">
                     {shouldRenderQuestion && (
                         <QuizCard
-                            key={questao.id}
+                            key={questao.id + '-' + indiceAtual}
                             questao={questao}
                             disabled={estado === 'feedback'}
                             selectedAnswer={selectedAnswer}
@@ -261,6 +288,7 @@ export default function MissaoQuizPage({ params }: { params: Promise<{ missaoId:
                 correctAnswer={questao.resposta_correta}
                 explanation={questao.explicacao}
                 isRetryRound={isRetryRound}
+                onAvancar={avancar}
             />
         </div>
     )

@@ -1,8 +1,11 @@
 'use client'
 
+import { useCallback } from 'react'
 import { motion } from 'framer-motion'
+import { Volume2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { QuestionTypeIcon } from './QuestionTypeIcon'
+import { CompletarFrase } from './CompletarFrase'
 import type { Questao } from '@/types/database'
 
 interface QuizCardProps {
@@ -16,6 +19,19 @@ interface QuizCardProps {
 const culturalTypes = ['coreano_para_portugues', 'portugues_para_coreano']
 
 export function QuizCard({ questao, onResponder, disabled, selectedAnswer, correctAnswer }: QuizCardProps) {
+    // Completar frase uses a different component
+    if (questao.tipo === 'completar_frase') {
+        return (
+            <CompletarFrase
+                questao={questao}
+                onResponder={onResponder}
+                disabled={disabled}
+                selectedAnswer={selectedAnswer}
+                correctAnswer={correctAnswer}
+            />
+        )
+    }
+
     let opcoes: string[] = []
 
     if (Array.isArray(questao.opcoes)) {
@@ -41,7 +57,7 @@ export function QuizCard({ questao, onResponder, disabled, selectedAnswer, corre
                 <QuestionTypeIcon tipo={questao.tipo} showLabel />
                 {isCultural && (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">
-                        🇰🇷 Tradução
+                        Traducao
                     </span>
                 )}
             </div>
@@ -51,9 +67,12 @@ export function QuizCard({ questao, onResponder, disabled, selectedAnswer, corre
                 <h2 className="text-2xl font-extrabold">{questao.enunciado}</h2>
                 {questao.enunciado_coreano && (
                     <div className="space-y-1">
-                        <p className="text-3xl text-[var(--color-coreduca-blue)] font-black tracking-wide">
-                            {questao.enunciado_coreano.replace(/\s*\(.*?\)\s*$/, '')}
-                        </p>
+                        <div className="flex items-center justify-center gap-2">
+                            <p className="text-3xl text-[var(--color-coreduca-blue)] font-black tracking-wide">
+                                {questao.enunciado_coreano.replace(/\s*\(.*?\)\s*$/, '')}
+                            </p>
+                            <AudioButton questao={questao} />
+                        </div>
                         {/* Show romanization if present in parentheses */}
                         {/\(([^)]+)\)\s*$/.test(questao.enunciado_coreano) && (
                             <p className="text-sm text-muted-foreground">
@@ -61,6 +80,9 @@ export function QuizCard({ questao, onResponder, disabled, selectedAnswer, corre
                             </p>
                         )}
                     </div>
+                )}
+                {!questao.enunciado_coreano && questao.audio_url && (
+                    <AudioButton questao={questao} />
                 )}
                 {questao.imagem_url && (
                     <div className="w-full h-40 bg-muted rounded-2xl flex items-center justify-center text-muted-foreground text-sm">
@@ -112,5 +134,38 @@ export function QuizCard({ questao, onResponder, disabled, selectedAnswer, corre
                 })}
             </div>
         </motion.div>
+    )
+}
+
+// Audio button component with TTS fallback
+function AudioButton({ questao }: { questao: Questao }) {
+    const play = useCallback(() => {
+        if (questao.audio_url) {
+            new Audio(questao.audio_url).play().catch(() => {})
+            return
+        }
+        // Fallback: Web Speech API TTS
+        if (questao.enunciado_coreano && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            const korean = questao.enunciado_coreano.replace(/\s*\(.*?\)\s*$/, '').trim()
+            const utterance = new SpeechSynthesisUtterance(korean)
+            utterance.lang = 'ko-KR'
+            utterance.rate = 0.8
+            window.speechSynthesis.cancel()
+            window.speechSynthesis.speak(utterance)
+        }
+    }, [questao.audio_url, questao.enunciado_coreano])
+
+    // Only show if we have audio_url or enunciado_coreano
+    if (!questao.audio_url && !questao.enunciado_coreano) return null
+
+    return (
+        <button
+            onClick={play}
+            type="button"
+            className="p-2 rounded-full bg-[var(--color-coreduca-blue)]/10 text-[var(--color-coreduca-blue)] hover:bg-[var(--color-coreduca-blue)]/20 transition-colors"
+            aria-label="Ouvir pronuncia"
+        >
+            <Volume2 className="h-5 w-5" />
+        </button>
     )
 }
