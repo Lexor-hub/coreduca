@@ -10,6 +10,7 @@ import { TopBar } from '@/components/layout/TopBar'
 import { useAuth } from '@/lib/auth-context'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { contarRevisaoPendente } from '@/hooks/useRevisao'
+import { useUISound } from '@/hooks/useUISound'
 import Link from 'next/link'
 import type { Trilha } from '@/types/database'
 import { Button } from '@/components/ui/button'
@@ -31,6 +32,7 @@ export default function AprenderPage() {
     const [warning, setWarning] = useState<string | null>(null)
     const [revisaoCount, setRevisaoCount] = useState(0)
     const [reloadKey, setReloadKey] = useState(0)
+    const { play } = useUISound()
 
     useEffect(() => {
         if (authLoading) return // Wait for auth to resolve
@@ -166,41 +168,54 @@ export default function AprenderPage() {
             )}
 
             <div className="px-4 pt-5">
-                <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}>
-                    <Card className="overflow-hidden border-0 bg-[linear-gradient(135deg,#132034_0%,#195cff_100%)] text-white shadow-[0_24px_60px_rgba(19,32,52,0.18)]">
-                        <CardContent className="space-y-5 p-6">
+                <motion.div initial={{ opacity: 0, y: 14, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', bounce: 0.4, duration: 0.8 }}>
+                    <Card className="relative overflow-hidden border border-white/10 bg-[linear-gradient(135deg,#132034_0%,#195cff_100%)] text-white shadow-[0_24px_60px_rgba(19,32,52,0.25)]">
+                        {/* Subtle Floating Hangul Background */}
+                        <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none select-none overflow-hidden">
+                            <motion.span animate={{ y: [0, -10, 0], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 6, ease: 'easeInOut' }} className="absolute -top-4 -left-4 text-8xl font-black">한</motion.span>
+                            <motion.span animate={{ y: [0, 15, 0], opacity: [0.3, 0.8, 0.3] }} transition={{ repeat: Infinity, duration: 8, ease: 'easeInOut', delay: 2 }} className="absolute top-12 right-12 text-6xl font-black">국</motion.span>
+                            <motion.span animate={{ y: [0, -5, 0], opacity: [0.4, 0.9, 0.4] }} transition={{ repeat: Infinity, duration: 5, ease: 'easeInOut', delay: 1 }} className="absolute bottom-4 left-1/3 text-7xl font-black">어</motion.span>
+                        </div>
+                        
+                        <CardContent className="relative z-10 space-y-5 p-6">
                             <div className="flex items-start justify-between gap-4">
                                 <div className="space-y-2">
                                     <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/70">Jornada de hoje</p>
-                                    <h2 className="max-w-xs text-2xl font-black leading-tight">
+                                    <h2 className="max-w-xs text-2xl font-black leading-tight drop-shadow-sm">
                                         Continue sua trilha e mantenha o ritmo do coreano.
                                     </h2>
-                                    <p className="max-w-sm text-sm leading-relaxed text-white/75">
+                                    <p className="max-w-sm text-sm leading-relaxed text-white/80">
                                         Missoes curtas, revisao dos erros e progresso visivel em cada etapa da area Aprender.
                                     </p>
                                 </div>
-                                <div className="rounded-[1.75rem] bg-white/12 px-4 py-3 text-center backdrop-blur">
-                                    <p className="text-3xl font-black">{overallProgress}%</p>
-                                    <p className="text-[11px] uppercase tracking-[0.2em] text-white/65">progresso</p>
+                                <div className="rounded-[1.75rem] border border-white/20 bg-white/10 px-4 py-3 text-center backdrop-blur-md shadow-inner">
+                                    <p className="text-3xl font-black drop-shadow-md">{overallProgress}%</p>
+                                    <p className="text-[11px] uppercase tracking-[0.2em] text-white/75 font-semibold">progresso</p>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-3 gap-3">
-                                <div className="rounded-2xl bg-white/10 p-3 backdrop-blur">
-                                    <Target className="mb-2 h-4 w-4 text-white/80" />
+                                <motion.div whileHover={{ scale: 1.05 }} className="rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm transition-colors hover:bg-white/10">
+                                    <motion.div animate={{ y: [-1.5, 1.5, -1.5] }} transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}>
+                                        <Target className="mb-2 h-4 w-4 text-white/90 drop-shadow-sm" />
+                                    </motion.div>
                                     <p className="text-lg font-black">{totalConcluidas}</p>
-                                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/65">missoes</p>
-                                </div>
-                                <div className="rounded-2xl bg-white/10 p-3 backdrop-blur">
-                                    <Sparkles className="mb-2 h-4 w-4 text-white/80" />
+                                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/70 font-medium">missoes</p>
+                                </motion.div>
+                                <motion.div whileHover={{ scale: 1.05 }} className="rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm transition-colors hover:bg-white/10">
+                                    <motion.div animate={{ y: [-1.5, 1.5, -1.5] }} transition={{ repeat: Infinity, duration: 2.2, delay: 0.3, ease: 'easeInOut' }}>
+                                        <Sparkles className="mb-2 h-4 w-4 text-white/90 drop-shadow-sm" />
+                                    </motion.div>
                                     <p className="text-lg font-black">{unlockedCount}</p>
-                                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/65">trilhas livres</p>
-                                </div>
-                                <div className="rounded-2xl bg-white/10 p-3 backdrop-blur">
-                                    <Flame className="mb-2 h-4 w-4 text-white/80" />
+                                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/70 font-medium">trilhas livres</p>
+                                </motion.div>
+                                <motion.div whileHover={{ scale: 1.05 }} className="rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm transition-colors hover:bg-white/10">
+                                    <motion.div animate={{ y: [-1.5, 1.5, -1.5] }} transition={{ repeat: Infinity, duration: 2.8, delay: 0.6, ease: 'easeInOut' }}>
+                                        <Flame className="mb-2 h-4 w-4 text-white/90 drop-shadow-sm" />
+                                    </motion.div>
                                     <p className="text-lg font-black">{revisaoCount}</p>
-                                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/65">para revisar</p>
-                                </div>
+                                    <p className="text-[11px] uppercase tracking-[0.18em] text-white/70 font-medium">para revisar</p>
+                                </motion.div>
                             </div>
                         </CardContent>
                     </Card>
@@ -217,21 +232,31 @@ export default function AprenderPage() {
 
             {revisaoCount > 0 && (
                 <div className="px-4 pt-5">
-                    <Link href="/aprender/revisao">
-                        <Card className="overflow-hidden border-0 bg-[linear-gradient(135deg,rgba(255,245,214,1),rgba(255,230,166,0.82))] shadow-md transition-all hover:-translate-y-0.5 hover:shadow-xl cursor-pointer">
-                            <CardContent className="p-5 flex items-center gap-4">
-                                <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-white/70 shadow-sm">
-                                    <RotateCcw className="h-6 w-6 text-amber-700" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-black text-sm text-amber-950">Revisao Diaria</p>
-                                    <p className="text-xs text-amber-950/75 mt-0.5">
-                                        {revisaoCount} {revisaoCount === 1 ? 'questao' : 'questoes'} para revisar
-                                    </p>
-                                </div>
-                                <ChevronRight className="h-5 w-5 text-amber-900/60 flex-shrink-0" />
-                            </CardContent>
-                        </Card>
+                    <Link href="/aprender/revisao" className="block outline-none" onClick={() => play('click')} onMouseEnter={() => play('hover')}>
+                        <motion.div
+                            whileHover={{ scale: 1.02, y: -2 }}
+                            whileTap={{ scale: 0.97 }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                            animate={{ boxShadow: ['0px 0px 0px rgba(0,0,0,0)', '0px 0px 20px rgba(251,191,36,0.3)', '0px 0px 0px rgba(0,0,0,0)'] }}
+                            className="rounded-xl overflow-hidden shadow-md"
+                        >
+                            <Card className="border border-amber-200/50 bg-[linear-gradient(135deg,rgba(255,245,214,1),rgba(255,230,166,0.85))] transition-colors">
+                                <CardContent className="p-5 flex items-center gap-4">
+                                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 bg-white/80 shadow-sm border border-white/50">
+                                        <RotateCcw className="h-6 w-6 text-amber-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-extrabold text-sm text-amber-900">Revisao Diaria</p>
+                                        <p className="text-xs text-amber-900/80 font-medium mt-0.5">
+                                            {revisaoCount} {revisaoCount === 1 ? 'questao' : 'questoes'} te esperando
+                                        </p>
+                                    </div>
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/50 text-amber-700 backdrop-blur-sm">
+                                        <ChevronRight className="h-5 w-5 ml-0.5" />
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </motion.div>
                     </Link>
                 </div>
             )}
@@ -252,47 +277,61 @@ export default function AprenderPage() {
                     return (
                         <motion.div
                             key={trilha.id}
-                            variants={{ hidden: { opacity: 0, y: 15 }, show: { opacity: 1, y: 0 } }}
+                            variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } }}
                         >
-                            <Link href={isLocked ? '#' : `/aprender/${trilha.id}`}>
-                                <Card className={`overflow-hidden border-0 shadow-md transition-all ${isLocked ? 'opacity-50' : 'cursor-pointer hover:-translate-y-0.5 hover:shadow-xl'}`}>
-                                    <CardContent className="p-4 flex items-center gap-4">
-                                        <div
-                                            className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm"
-                                            style={{ backgroundColor: `${trilha.cor}15` }}
-                                        >
-                                            {isLocked ? (
-                                                <Lock className="h-6 w-6 text-muted-foreground" />
-                                            ) : (
-                                                <span className="text-2xl">{trilha.icone}</span>
-                                            )}
-                                        </div>
-
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <p className="font-bold text-sm">{trilha.titulo}</p>
-                                                {progresso === 100 && (
-                                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            <Link 
+                                href={isLocked ? '#' : `/aprender/${trilha.id}`} 
+                                className={`block outline-none ${isLocked ? 'cursor-default' : ''}`}
+                                onClick={() => !isLocked && play('pop')}
+                                onMouseEnter={() => !isLocked && play('hover')}
+                            >
+                                <motion.div
+                                    whileHover={!isLocked ? { scale: 1.02, y: -2 } : {}}
+                                    whileTap={!isLocked ? { scale: 0.98 } : {}}
+                                    transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                                    className={`rounded-xl overflow-hidden shadow-sm border border-slate-200/60 bg-white transition-all ${isLocked ? 'opacity-50 saturate-50' : 'hover:shadow-md hover:border-slate-300'}`}
+                                >
+                                    <Card className="border-0 shadow-none bg-transparent">
+                                        <CardContent className="p-4 flex items-center gap-4">
+                                            <div
+                                                className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+                                                style={{ backgroundColor: `${trilha.cor}${isLocked ? '10' : '15'}` }}
+                                            >
+                                                {isLocked ? (
+                                                    <Lock className="h-5 w-5 text-slate-400" />
+                                                ) : (
+                                                    <span className="text-2xl drop-shadow-sm">{trilha.icone}</span>
                                                 )}
                                             </div>
-                                            <div className="mt-1 flex items-center gap-2">
-                                                <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                                                    {progresso === 100 ? 'Concluida' : isLocked ? 'Bloqueada' : concluidas > 0 ? 'Em andamento' : 'Pronta para iniciar'}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <Progress value={progresso} className="h-1.5 flex-1" />
-                                                <span className="text-[10px] text-muted-foreground font-semibold whitespace-nowrap">
-                                                    {concluidas}/{total}
-                                                </span>
-                                            </div>
-                                        </div>
 
-                                        {!isLocked && (
-                                            <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                                        )}
-                                    </CardContent>
-                                </Card>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <p className={`font-bold text-sm ${isLocked ? 'text-slate-500' : 'text-slate-900'}`}>{trilha.titulo}</p>
+                                                    {progresso === 100 && (
+                                                        <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />
+                                                    )}
+                                                </div>
+                                                <div className="mt-1 flex items-center gap-2">
+                                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${isLocked ? 'bg-slate-100 text-slate-400' : progresso === 100 ? 'bg-green-100 text-green-700' : concluidas > 0 ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-600'}`}>
+                                                        {progresso === 100 ? 'Concluida' : isLocked ? 'Bloqueada' : concluidas > 0 ? 'Em andamento' : 'Pronta para iniciar'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-3 mt-1.5 opacity-90">
+                                                    <Progress value={progresso} className="h-1.5 flex-1" />
+                                                    <span className="text-[10px] text-slate-500 font-bold whitespace-nowrap">
+                                                        {concluidas}/{total}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {!isLocked && (
+                                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 text-slate-400">
+                                                    <ChevronRight className="h-5 w-5 ml-0.5" />
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                </motion.div>
                             </Link>
                         </motion.div>
                     )

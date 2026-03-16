@@ -40,6 +40,7 @@ export async function updateSession(request: NextRequest) {
     const isProtectedRoute = protectedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
     const isAuthRoute = authPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
     const isAdminRoute = pathname === '/admin' || pathname.startsWith('/admin/')
+    const isOnboardingRoute = pathname === '/onboarding' || pathname.startsWith('/onboarding/')
 
     if (!user && isProtectedRoute) {
         const url = request.nextUrl.clone()
@@ -47,10 +48,32 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url)
     }
 
-    if (user && isAuthRoute) {
-        const url = request.nextUrl.clone()
-        url.pathname = '/home'
-        return NextResponse.redirect(url)
+    if (user) {
+        const { data: onboarding } = await supabase
+            .from('onboarding_completions')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle()
+
+        const hasCompletedOnboarding = Boolean(onboarding)
+
+        if (isAuthRoute) {
+            const url = request.nextUrl.clone()
+            url.pathname = hasCompletedOnboarding ? '/home' : '/onboarding'
+            return NextResponse.redirect(url)
+        }
+
+        if (!hasCompletedOnboarding && !isOnboardingRoute && isProtectedRoute) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/onboarding'
+            return NextResponse.redirect(url)
+        }
+
+        if (hasCompletedOnboarding && isOnboardingRoute) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/home'
+            return NextResponse.redirect(url)
+        }
     }
 
     if (user && isAdminRoute) {

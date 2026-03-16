@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       .eq("id", personaId)
       .eq("ativo", true)
       .single(),
-    supabase.from("profiles").select("plano").eq("id", user.id).single(),
+    supabase.from("profiles").select("plano, dorama_favorito").eq("id", user.id).single(),
   ])
 
   if (!persona) {
@@ -98,12 +98,17 @@ export async function POST(request: NextRequest) {
       ? sanitizeHistory(session.mensagens)
       : historico
 
+  let systemPrompt = persona.system_prompt
+  if (profile?.dorama_favorito) {
+    systemPrompt += `\n\nA aluna gosta do dorama: ${profile.dorama_favorito}. Use referencias quando possivel.`
+  }
+
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0.7,
     max_tokens: 500,
     messages: [
-      { role: "system", content: persona.system_prompt },
+      { role: "system", content: systemPrompt },
       ...conversationHistory,
       { role: "user", content: mensagem },
     ],

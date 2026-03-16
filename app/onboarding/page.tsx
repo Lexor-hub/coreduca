@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronRight, ChevronLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth-context'
 import { createBrowserClient } from '@/lib/supabase/client'
 import { Logo } from '@/components/ui/Logo'
 import type { NivelCoreduca } from '@/types/database'
+import { Card, CardContent } from '@/components/ui/card'
 
 const interesses = [
     { id: 'doramas', label: 'Doramas', emoji: '🎬' },
@@ -27,38 +28,78 @@ const niveis = [
 
 export default function OnboardingPage() {
     const router = useRouter()
-    const { user, refreshProfile } = useAuth()
+    const { user, loading: authLoading, refreshProfile } = useAuth()
     const supabase = createBrowserClient()
     const [step, setStep] = useState(0)
     const [interesse, setInteresse] = useState<string | null>(null)
     const [dorama, setDorama] = useState('')
     const [nivel, setNivel] = useState<NivelCoreduca | null>(null)
     const [loading, setLoading] = useState(false)
+    const [submitError, setSubmitError] = useState<string | null>(null)
 
     const totalSteps = 5
     const progress = ((step + 1) / totalSteps) * 100
 
+    useEffect(() => {
+        if (!authLoading && !user) {
+            router.replace('/login')
+        }
+    }, [authLoading, router, user])
+
     const handleComplete = async () => {
         if (!user) return
         setLoading(true)
+        setSubmitError(null)
 
         // Update profile with onboarding answers
-        await supabase.from('profiles').update({
+        const { error: profileError } = await supabase.from('profiles').update({
             interesse_principal: interesse,
             dorama_favorito: dorama || null,
             nivel_atual: nivel || 'exploradora',
             updated_at: new Date().toISOString(),
         }).eq('id', user.id)
 
+        if (profileError) {
+            setSubmitError('Nao foi possivel salvar suas respostas agora. Tente novamente.')
+            setLoading(false)
+            return
+        }
+
         // Save onboarding completion
-        await supabase.from('onboarding_completions').upsert({
+        const { error: onboardingError } = await supabase.from('onboarding_completions').upsert({
             user_id: user.id,
             respostas: { interesse, dorama, nivel },
             completed_at: new Date().toISOString(),
         }, { onConflict: 'user_id' })
 
+        if (onboardingError) {
+            setSubmitError('Salvamos parte do seu perfil, mas nao conseguimos finalizar o onboarding. Tente novamente.')
+            setLoading(false)
+            return
+        }
+
         await refreshProfile()
         router.push('/home')
+    }
+
+    if (authLoading) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center p-6">
+                <Loader2 className="h-10 w-10 animate-spin text-[var(--color-coreduca-blue)]" />
+            </div>
+        )
+    }
+
+    if (!user) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center p-6">
+                <Card className="w-full max-w-md border-0 shadow-sm">
+                    <CardContent className="p-6 text-center text-sm text-muted-foreground">
+                        Redirecionando para o login...
+                    </CardContent>
+                </Card>
+            </div>
+        )
     }
 
     const slides = [
@@ -180,6 +221,14 @@ export default function OnboardingPage() {
 
             {/* Navigation */}
             <div className="flex gap-3 mt-8">
+                {submitError && (
+                    <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        {submitError}
+                    </p>
+                )}
+            </div>
+
+            <div className="flex gap-3 mt-4">
                 {step > 0 && (
                     <Button
                         variant="outline"

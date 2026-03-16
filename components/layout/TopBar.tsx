@@ -8,12 +8,28 @@ import { Logo } from '@/components/ui/Logo'
 interface TopBarProps {
     title?: string
     showBack?: boolean
+    backHref?: string
     showNotifications?: boolean
     rightContent?: React.ReactNode
 }
 
-export function TopBar({ title, showBack = false, showNotifications = true, rightContent }: TopBarProps) {
+export function TopBar({
+    title,
+    showBack = false,
+    backHref,
+    showNotifications = false,
+    rightContent,
+}: TopBarProps) {
     const router = useRouter()
+
+    const handleBack = () => {
+        if (backHref) {
+            router.push(backHref)
+            return
+        }
+
+        router.back()
+    }
 
     return (
         <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-border/50 safe-area-top">
@@ -24,7 +40,7 @@ export function TopBar({ title, showBack = false, showNotifications = true, righ
                             variant="ghost"
                             size="icon"
                             className="h-9 w-9 rounded-full"
-                            onClick={() => router.back()}
+                            onClick={handleBack}
                             aria-label="Voltar"
                         >
                             <ArrowLeft className="h-5 w-5" />

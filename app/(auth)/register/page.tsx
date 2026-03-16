@@ -21,10 +21,12 @@ export default function RegisterPage() {
     const [showPassword, setShowPassword] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null)
 
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault()
         setError(null)
+        setConfirmationEmail(null)
         setLoading(true)
 
         const { data, error: signUpError } = await supabase.auth.signUp({
@@ -49,15 +51,13 @@ export default function RegisterPage() {
             return
         }
 
-        // Update profile display name (trigger created it automatically)
-        if (data.user) {
-            await supabase
-                .from('profiles')
-                .update({ display_name: name })
-                .eq('id', data.user.id)
+        if (data.session) {
+            router.push('/onboarding')
+            return
         }
 
-        router.push('/onboarding')
+        setConfirmationEmail(email)
+        setLoading(false)
     }
 
     const handleGoogleLogin = async () => {
@@ -65,7 +65,7 @@ export default function RegisterPage() {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
+                redirectTo: `${window.location.origin}/auth/callback?next=%2Fonboarding`,
             },
         })
         if (error) {
@@ -108,6 +108,16 @@ export default function RegisterPage() {
                         className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 text-center"
                     >
                         {error}
+                    </motion.div>
+                )}
+
+                {confirmationEmail && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-700 text-center"
+                    >
+                        Enviamos um link de confirmacao para <strong>{confirmationEmail}</strong>. Confirme seu email para entrar e concluir o onboarding.
                     </motion.div>
                 )}
 

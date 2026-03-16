@@ -37,16 +37,16 @@ function getBestDisplayName(user: {
 export async function GET(request: Request) {
     const { searchParams, origin } = new URL(request.url)
     const code = searchParams.get('code')
-    const next = searchParams.get('next') ?? '/home'
+    const requestedNext = searchParams.get('next') ?? '/home'
 
     if (code) {
         const supabase = await createServerClient()
         const { error } = await supabase.auth.exchangeCodeForSession(code)
         if (!error) {
-            try {
-                const { data: { user } } = await supabase.auth.getUser()
+            const { data: { user } } = await supabase.auth.getUser()
 
-                if (user) {
+            if (user) {
+                try {
                     const bestDisplayName = getBestDisplayName({
                         email: user.email,
                         user_metadata: user.user_metadata,
@@ -71,12 +71,23 @@ export async function GET(request: Request) {
                                 .eq('id', user.id)
                         }
                     }
+                } catch (syncError) {
+                    console.error('auth callback display_name sync failed', syncError)
                 }
-            } catch (syncError) {
-                console.error('auth callback display_name sync failed', syncError)
-            }
 
-            return NextResponse.redirect(`${origin}${next}`)
+                const { data: onboarding } = await supabase
+                    .from('onboarding_completions')
+                    .select('id')
+                    .eq('user_id', user.id)
+                    .maybeSingle()
+
+                const hasCompletedOnboarding = Boolean(onboarding)
+                const next = hasCompletedOnboarding
+                    ? (requestedNext === '/onboarding' ? '/home' : requestedNext)
+                    : '/onboarding'
+
+                return NextResponse.redirect(`${origin}${next}`)
+            }
         }
     }
 
