@@ -31,7 +31,11 @@ export default function RegisterPage() {
             email,
             password,
             options: {
-                data: { display_name: name },
+                data: {
+                    display_name: name,
+                    full_name: name,
+                    name,
+                },
             },
         })
 
