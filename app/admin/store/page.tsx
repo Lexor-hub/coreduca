@@ -62,12 +62,12 @@ export default function AdminStorePage() {
 
             // Load Clicks (Admin only policy applies)
             const { data: clicksData, error: clicksError } = await supabase
-                .from('store_clicks')
+                .from('store_clicks' as any)
                 .select('item_id, created_at')
             
             if (!clicksError && clicksData) {
                 const clickMap: Record<string, { count: number, last_click: string }> = {}
-                clicksData.forEach((click) => {
+                ;(clicksData as any[]).forEach((click) => {
                     const id = click.item_id
                     if (!clickMap[id]) {
                         clickMap[id] = { count: 0, last_click: click.created_at }
@@ -212,11 +212,12 @@ export default function AdminStorePage() {
                                         onChange={(event) => setSelectedItem((current) => ({ ...current, tipo: event.target.value as StoreItem['tipo'] }))}
                                         className="flex h-10 w-full rounded-md border border-input bg-slate-50 px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                     >
-                                        <option value="produto">Produto Físico</option>
-                                        <option value="kit">Kit K-Pop</option>
-                                        <option value="workshop">Workshop</option>
-                                        <option value="evento">Ingresso (Evento)</option>
-                                        <option value="experiencia">Experiência</option>
+                                        <option value="colecionador">Itens de colecionadoras(o)</option>
+                                        <option value="vestuario">Vestuário</option>
+                                        <option value="skincare">Skincare</option>
+                                        <option value="alimento">Comidas / Bebidas</option>
+                                        <option value="album">Figurinhas / Álbuns</option>
+                                        <option value="produto">Outros (Produto Geral)</option>
                                     </select>
                                 </div>
                                 <div className="space-y-1.5">
