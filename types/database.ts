@@ -43,6 +43,11 @@ export type Profile = {
   ultimo_acesso: string | null
   is_admin: boolean
   plano: Plano
+  beta_access: boolean
+  premium_granted_at: string | null
+  premium_expires_at: string | null
+  premium_granted_by: string | null
+  billing_source: "none" | "manual"
   created_at: string
   updated_at: string
 }
@@ -104,12 +109,15 @@ export type Questao = {
   ativo: boolean
 }
 
+export type PublicQuestao = Omit<Questao, "resposta_correta">
+
 export type QuizAnswer = {
   resposta: string
   correta: boolean
 }
 
 export type QuizAnswers = Record<string, QuizAnswer>
+export type QuizSubmission = Record<string, { resposta: string }>
 
 export type QuizCompletionResult = {
   score: number
@@ -118,6 +126,12 @@ export type QuizCompletionResult = {
   badge_nome: string | null
   missoes_concluidas: number
   total_missoes: number
+}
+
+export type QuestionVerificationResult = {
+  correta: boolean
+  correctAnswer: string | null
+  explanation: string | null
 }
 
 export type MissaoAttempt = {
@@ -189,6 +203,8 @@ export type AIPersona = {
   ordem?: number | null
 }
 
+export type PublicAIPersona = Omit<AIPersona, "system_prompt">
+
 export type AISession = {
   id: string
   user_id: string
@@ -212,9 +228,12 @@ export type CommunityChannel = {
 }
 
 export type CommunityProfileSummary = {
+  id?: string
   display_name: string | null
   username: string
   avatar_url: string | null
+  nivel_atual?: NivelCoreduca
+  streak_atual?: number
 }
 
 export type CommunityPost = {
@@ -283,10 +302,52 @@ type PostReport = {
   post_id: string
   user_id: string
   motivo: string
-  detalhes: string | null
-  status: "aberto" | "revisado" | "resolvido"
+  status: "pendente" | "revisado" | "resolvido"
   created_at: string
 }
+
+export type BetaInvite = {
+  email: string
+  active: boolean
+  default_plan: Plano
+  invited_by: string | null
+  note: string | null
+  created_at: string
+  activated_at: string | null
+}
+
+export type AdminAuditLog = {
+  id: string
+  actor_id: string
+  target_user_id: string | null
+  action: string
+  payload: Json
+  created_at: string
+}
+
+export type ApiRateLimit = {
+  user_id: string
+  route: string
+  bucket_start: string
+  count: number
+}
+
+export type ApiRateLimitResult = {
+  allowed: boolean
+  remaining: number
+  request_count: number
+  reset_at: string
+}
+
+export type ProfileEntitlementFields = Pick<
+  Profile,
+  | "plano"
+  | "beta_access"
+  | "premium_granted_at"
+  | "premium_expires_at"
+  | "premium_granted_by"
+  | "billing_source"
+>
 
 type TableDefinition<Row, Insert = Partial<Row>, Update = Partial<Row>> = {
   Row: Row
@@ -330,6 +391,9 @@ export type Database = {
       pronunciation_attempts: TableDefinition<PronunciationAttempt>
       pronunciation_items: TableDefinition<PronunciationItem>
       questoes: TableDefinition<Questao>
+      beta_invites: TableDefinition<BetaInvite>
+      admin_audit_log: TableDefinition<AdminAuditLog>
+      api_rate_limits: TableDefinition<ApiRateLimit>
       store_items: TableDefinition<StoreItem>
       trilhas: TableDefinition<Trilha>
       user_badges: TableDefinition<
@@ -347,9 +411,19 @@ export type Database = {
         }>
     }
     Views: {
+      ai_personas_public: ViewDefinition<PublicAIPersona>
+      profile_public_summary: ViewDefinition<CommunityProfileSummary>
       pronunciation_best_scores: ViewDefinition<PronunciationBestScore>
     }
     Functions: {
+      consume_api_rate_limit: {
+        Args: {
+          p_route: string
+          p_bucket_seconds: number
+          p_limit: number
+        }
+        Returns: ApiRateLimitResult
+      }
       finalizar_missao: {
         Args: {
           p_missao_id: string
