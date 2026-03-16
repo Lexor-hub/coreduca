@@ -21,6 +21,7 @@ import {
 } from '@/lib/community'
 import { MiniProfileSheet } from '@/components/comunidade/MiniProfileSheet'
 import type { CommunityChannel, CommunityComment, CommunityPost } from '@/types/database'
+import { createCommunityComment, toggleCommunityReaction } from '@/lib/community-actions'
 
 const MAX_COMMENT_LENGTH = 160
 
@@ -53,7 +54,7 @@ type CommentItem = Pick<
 
 export default function PostPage({ params }: { params: Promise<{ postId: string }> }) {
   const { postId } = use(params)
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const supabase = useMemo(() => createBrowserClient(), [])
 
   const [post, setPost] = useState<PostDetalhe | null>(null)
@@ -63,6 +64,9 @@ export default function PostPage({ params }: { params: Promise<{ postId: string 
   const [comment, setComment] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
   const [miniProfileUserId, setMiniProfileUserId] = useState<string | null>(null)
+  const [reactionPending, setReactionPending] = useState(false)
+  const [commentSubmitting, setCommentSubmitting] = useState(false)
+  const [reporting, setReporting] = useState(false)
 
   const loadPost = useCallback(async () => {
     const [{ data: postData, error: postError }, { data: commentsData, error: commentsError }] = await Promise.all([
@@ -123,25 +127,34 @@ export default function PostPage({ params }: { params: Promise<{ postId: string 
   const toggleReaction = async (emoji: string, reacted: boolean) => {
     if (!user || !post) return
 
-    if (reacted) {
-      await supabase
-        .from('post_reactions')
-        .delete()
-        .eq('post_id', post.id)
-        .eq('user_id', user.id)
-        .eq('emoji', emoji)
-    } else {
-      await supabase.from('post_reactions').insert({
-        post_id: post.id,
-        user_id: user.id,
-        emoji,
-      })
+    const previousPost = post
+    const nextReactions = reacted
+      ? (post.post_reactions || []).filter((reaction) => !(reaction.user_id === user.id && reaction.emoji === emoji))
+      : [...(post.post_reactions || []), { emoji, user_id: user.id }]
+
+    setReactionPending(true)
+    setPost({
+      ...post,
+      post_reactions: nextReactions,
+      reacoes: {
+        ...(post.reacoes || {}),
+        [emoji]: Math.max(0, Number(post.reacoes?.[emoji] ?? 0) + (reacted ? -1 : 1)),
+      },
+    })
+
+    const { error } = await toggleCommunityReaction(supabase, {
+      postId: post.id,
+      userId: user.id,
+      emoji,
+      reacted,
+    })
+
+    if (error) {
+      setPost(previousPost)
+      setFeedback('Nao foi possivel atualizar sua reacao agora.')
     }
 
-    const snapshot = await loadPost()
-    setPost(snapshot.post)
-    setComments(snapshot.comments)
-    setChannel(snapshot.channel)
+    setReactionPending(false)
   }
 
   const handleComment = async () => {
@@ -154,29 +167,53 @@ export default function PostPage({ params }: { params: Promise<{ postId: string 
       return
     }
 
-    const { error } = await supabase.from('community_comments').insert({
+    const optimisticComment: CommentItem = {
+      id: `temp-${Date.now()}`,
       post_id: post.id,
       user_id: user.id,
+      conteudo: trimmedComment,
+      status: 'ativo',
+      created_at: new Date().toISOString(),
+      profiles: profile ? {
+        display_name: profile.display_name,
+        username: profile.username,
+        avatar_url: profile.avatar_url,
+      } : undefined,
+    }
+
+    const previousComments = comments
+    const previousPost = post
+
+    setCommentSubmitting(true)
+    setComments((current) => [...current, optimisticComment])
+    setPost({
+      ...post,
+      total_comentarios: post.total_comentarios + 1,
+    })
+
+    const { error } = await createCommunityComment(supabase, {
+      postId: post.id,
+      userId: user.id,
       conteudo: trimmedComment,
     })
 
     if (error) {
+      setComments(previousComments)
+      setPost(previousPost)
       setFeedback(error.message)
+      setCommentSubmitting(false)
       return
     }
 
     setComment('')
     setFeedback('Resposta publicada com sucesso.')
-
-    const snapshot = await loadPost()
-    setPost(snapshot.post)
-    setComments(snapshot.comments)
-    setChannel(snapshot.channel)
+    setCommentSubmitting(false)
   }
 
   const handleReport = async () => {
     if (!user || !post) return
 
+    setReporting(true)
     const { error } = await supabase.from('post_reports').insert({
       post_id: post.id,
       user_id: user.id,
@@ -184,12 +221,13 @@ export default function PostPage({ params }: { params: Promise<{ postId: string 
     })
 
     setFeedback(error ? error.message : 'Denuncia enviada para moderacao.')
+    setReporting(false)
   }
 
   if (loading) {
     return (
       <>
-        <TopBar title="Post" showBack />
+        <TopBar title="Post" showBack backHref="/comunidade" />
         <div className="space-y-4 px-4 py-5">
           <Skeleton className="h-40 rounded-3xl" />
           <Skeleton className="h-32 rounded-3xl" />
@@ -202,7 +240,7 @@ export default function PostPage({ params }: { params: Promise<{ postId: string 
   if (!post) {
     return (
       <>
-        <TopBar title="Post" showBack />
+        <TopBar title="Post" showBack backHref="/comunidade" />
         <div className="px-4 py-5 text-sm text-muted-foreground">Post nao encontrado.</div>
       </>
     )
@@ -230,7 +268,7 @@ export default function PostPage({ params }: { params: Promise<{ postId: string 
 
   return (
     <>
-      <TopBar title="Post" showBack />
+      <TopBar title="Post" showBack backHref={`/comunidade/${clubSlug}`} />
       <MiniProfileSheet userId={miniProfileUserId} onClose={() => setMiniProfileUserId(null)} />
 
       <div className="space-y-5 px-4 py-5">
@@ -258,7 +296,7 @@ export default function PostPage({ params }: { params: Promise<{ postId: string 
                 <p className="text-[10px] text-muted-foreground">{timeAgo(post.created_at)}</p>
               </div>
 
-              <Button variant="ghost" size="icon" onClick={handleReport} aria-label="Denunciar post">
+              <Button variant="ghost" size="icon" onClick={handleReport} aria-label="Denunciar post" disabled={reporting}>
                 <Flag className="h-4 w-4" />
               </Button>
             </div>
@@ -283,6 +321,7 @@ export default function PostPage({ params }: { params: Promise<{ postId: string 
                 <button
                   key={emoji}
                   onClick={() => toggleReaction(emoji, userReactions.has(emoji))}
+                  disabled={reactionPending}
                   className={`rounded-full px-3 py-1.5 text-sm font-semibold ${
                     userReactions.has(emoji)
                       ? 'bg-[var(--color-coreduca-blue)]/10 text-[var(--color-coreduca-blue)]'
@@ -321,10 +360,10 @@ export default function PostPage({ params }: { params: Promise<{ postId: string 
               <p className="text-xs text-muted-foreground">{comment.length}/{MAX_COMMENT_LENGTH}</p>
               <Button
                 onClick={handleComment}
-                disabled={!comment.trim() || comment.trim().length > MAX_COMMENT_LENGTH}
+                disabled={commentSubmitting || !comment.trim() || comment.trim().length > MAX_COMMENT_LENGTH}
                 className="bg-[var(--color-coreduca-blue)] text-white"
               >
-                Responder
+                {commentSubmitting ? 'Enviando...' : 'Responder'}
               </Button>
             </div>
 

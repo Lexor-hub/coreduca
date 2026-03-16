@@ -25,6 +25,7 @@ import {
   type CommunityComposerPayload,
 } from '@/components/comunidade/PromptComposerSheet'
 import type { CommunityChannel } from '@/types/database'
+import { createCommunityPost } from '@/lib/community-actions'
 
 type ClubSummary = {
   postCount: number
@@ -32,10 +33,6 @@ type ClubSummary = {
 }
 
 const CLUB_SUMMARY_LIMIT = 40
-
-function isMissingCommunityColumns(message: string) {
-  return message.includes('column') && message.includes('community_posts')
-}
 
 export default function ComunidadePage() {
   const { user, profile } = useAuth()
@@ -150,30 +147,17 @@ export default function ComunidadePage() {
     setComposerSubmitting(true)
     setComposerError(null)
 
-    const insertPayload = {
-      user_id: user.id,
-      channel_id: payload.channelId,
+    const { error: insertError } = await createCommunityPost(supabase, {
+      userId: user.id,
+      channelId: payload.channelId,
       conteudo: payload.conteudo,
-      post_kind: payload.postKind,
-      prompt_slug: payload.promptSlug,
-      context_type: payload.contextType,
-      context_id: payload.contextId,
-      context_label: payload.contextLabel,
-      context_date: payload.contextDate,
-    }
-
-    let insertError: { message: string } | null = null
-    const { error } = await supabase.from('community_posts').insert(insertPayload)
-    insertError = error ? { message: error.message } : null
-
-    if (insertError && isMissingCommunityColumns(insertError.message)) {
-      const fallback = await supabase.from('community_posts').insert({
-        user_id: user.id,
-        channel_id: payload.channelId,
-        conteudo: payload.conteudo,
-      })
-      insertError = fallback.error ? { message: fallback.error.message } : null
-    }
+      postKind: payload.postKind,
+      promptSlug: payload.promptSlug,
+      contextType: payload.contextType,
+      contextId: payload.contextId,
+      contextLabel: payload.contextLabel,
+      contextDate: payload.contextDate,
+    })
 
     setComposerSubmitting(false)
 

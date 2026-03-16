@@ -34,15 +34,22 @@ export default function AdminPronunciaPage() {
     const [selectedItem, setSelectedItem] = useState<EditablePronunciationItem>(emptyItem())
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         async function loadItems() {
-            const { data } = await supabase
+            setError(null)
+            const { data, error: loadError } = await supabase
                 .from('pronunciation_items')
                 .select('*')
                 .order('created_at', { ascending: false })
 
-            setItems((data as EditablePronunciationItem[]) || [])
+            if (loadError) {
+                setError('Nao foi possivel carregar os itens de pronuncia.')
+                setItems([])
+            } else {
+                setItems((data as EditablePronunciationItem[]) || [])
+            }
             setLoading(false)
         }
 
@@ -50,7 +57,13 @@ export default function AdminPronunciaPage() {
     }, [supabase])
 
     const handleSave = async () => {
+        if (!selectedItem.frase_coreano.trim() || !selectedItem.traducao.trim()) {
+            setError('Preencha a frase em coreano e a traducao antes de salvar.')
+            return
+        }
+
         setSaving(true)
+        setError(null)
         const payload = {
             frase_coreano: selectedItem.frase_coreano,
             transliteracao: selectedItem.transliteracao || null,
@@ -68,7 +81,10 @@ export default function AdminPronunciaPage() {
             if (data) setSelectedItem(data as EditablePronunciationItem)
         }
 
-        const { data } = await supabase.from('pronunciation_items').select('*').order('created_at', { ascending: false })
+        const { data, error: reloadError } = await supabase.from('pronunciation_items').select('*').order('created_at', { ascending: false })
+        if (reloadError) {
+            setError('O item foi salvo, mas a lista nao pode ser atualizada agora.')
+        }
         setItems((data as EditablePronunciationItem[]) || [])
         setSaving(false)
     }
@@ -87,6 +103,9 @@ export default function AdminPronunciaPage() {
                     </Button>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                    {error && (
+                        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{error}</p>
+                    )}
                     {loading ? (
                         <p className="text-sm text-muted-foreground">Carregando...</p>
                     ) : items.length === 0 ? (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 
 type SoundType = 'hover' | 'click' | 'success' | 'error' | 'pop'
 
@@ -9,40 +9,34 @@ type SoundType = 'hover' | 'click' | 'success' | 'error' | 'pop'
  * It uses the native HTMLAudioElement and handles browser autoplay restrictions gracefully.
  */
 export function useUISound() {
-  const [audioContext, setAudioContext] = useState<AudioContext | null>(null)
-  const [sounds, setSounds] = useState<Record<string, HTMLAudioElement>>({})
-
-  // Initialize sounds on the first user interaction to bypass autoplay policies
-  useEffect(() => {
-    // Only run on client
-    if (typeof window === 'undefined') return
-
-    // Pre-declare the paths. You will need to add these small mp3 files to public/sounds/
-    // If they don't exist, the audio element simply fails silently (which is fine for UI enhancements).
-    const soundUrls = {
-      hover: '/sounds/hover.mp3', // Soft tick or swoosh
-      click: '/sounds/click.mp3', // Snappy pop
-      pop: '/sounds/pop.mp3',     // Bouncy pop for unlocks
+  const sounds = useMemo<Record<string, HTMLAudioElement>>(() => {
+    if (typeof window === 'undefined') {
+      return {}
     }
 
-    const loadedSounds: Record<string, HTMLAudioElement> = {}
+    const soundUrls = {
+      hover: '/sounds/hover.mp3',
+      click: '/sounds/click.mp3',
+      pop: '/sounds/pop.mp3',
+    }
 
-    // Preload audio elements
-    Object.entries(soundUrls).forEach(([key, url]) => {
-      const audio = new Audio(url)
-      audio.volume = 0.2 // Keep UI sounds subtle
-      loadedSounds[key] = audio
-    })
+    return Object.fromEntries(
+      Object.entries(soundUrls).map(([key, url]) => {
+        const audio = new Audio(url)
+        audio.volume = 0.2
+        return [key, audio]
+      })
+    )
+  }, [])
 
-    setSounds(loadedSounds)
-
-    // Cleanup
+  useEffect(() => {
     return () => {
-      Object.values(loadedSounds).forEach(audio => {
+      Object.values(sounds).forEach((audio) => {
+        audio.pause()
         audio.src = ''
       })
     }
-  }, [])
+  }, [sounds])
 
   const play = useCallback(
     (type: SoundType) => {
@@ -54,13 +48,12 @@ export function useUISound() {
           clonedSound.volume = sound.volume
           
           // Play and ignore the promise rejection if autoplay is blocked
-          clonedSound.play().catch((e) => {
+          clonedSound.play().catch(() => {
              // Browser blocked autoplay or file not found.
              // We fail silently because UI sounds are non-critical enhancements.
-             // console.debug('Audio play skipped:', e.message)
           })
         }
-      } catch (err) {
+      } catch {
          // Failsafe
       }
     },

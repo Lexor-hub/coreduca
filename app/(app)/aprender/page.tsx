@@ -14,6 +14,7 @@ import { useUISound } from '@/hooks/useUISound'
 import Link from 'next/link'
 import type { Trilha } from '@/types/database'
 import { Button } from '@/components/ui/button'
+import { countUnlockedTrails, isTrailUnlocked } from '@/lib/learning'
 
 type UserProgress = {
     trilha_id: string
@@ -145,13 +146,7 @@ export default function AprenderPage() {
     const totalMissoes = Object.values(progressMap).reduce((sum, current) => sum + current.total_missoes, 0)
     const totalConcluidas = Object.values(progressMap).reduce((sum, current) => sum + current.missoes_concluidas, 0)
     const overallProgress = totalMissoes > 0 ? Math.round((totalConcluidas / totalMissoes) * 100) : 0
-    const unlockedCount = trilhas.reduce((sum, trilha, index) => {
-        if (index === 0 || progressMap[trilhas[index - 1]?.id]) {
-            return sum + 1
-        }
-
-        return sum
-    }, 0)
+    const unlockedCount = countUnlockedTrails(trilhas, progressMap)
 
     return (
         <>
@@ -269,7 +264,7 @@ export default function AprenderPage() {
             >
                 {trilhas.map((trilha, index) => {
                     const progress = progressMap[trilha.id]
-                    const isLocked = index > 0 && !progressMap[trilhas[index - 1]?.id]
+                    const isLocked = !isTrailUnlocked(trilhas, progressMap, index)
                     const progresso = progress?.percentual ?? 0
                     const concluidas = progress?.missoes_concluidas ?? 0
                     const total = progress?.total_missoes ?? 5
@@ -280,7 +275,7 @@ export default function AprenderPage() {
                             variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } } }}
                         >
                             <Link 
-                                href={isLocked ? '#' : `/aprender/${trilha.id}`} 
+                                href={isLocked ? '/aprender' : `/aprender/${trilha.id}`} 
                                 className={`block outline-none ${isLocked ? 'cursor-default' : ''}`}
                                 onClick={() => !isLocked && play('pop')}
                                 onMouseEnter={() => !isLocked && play('hover')}

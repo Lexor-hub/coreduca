@@ -53,6 +53,7 @@ export default function PerfilPage() {
     const [editColor, setEditColor] = useState('#A855F7')
     const [saving, setSaving] = useState(false)
     const [saveError, setSaveError] = useState<string | null>(null)
+    const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
     // Sign out confirmation
     const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false)
@@ -163,6 +164,7 @@ export default function PerfilPage() {
         setEditEmoji(parsed?.emoji || '🐱')
         setEditColor(parsed?.color || '#A855F7')
         setSaveError(null)
+        setSaveSuccess(null)
         setEditOpen(true)
     }
 
@@ -184,6 +186,7 @@ export default function PerfilPage() {
         if (!error) {
             await refreshProfile()
             setEditOpen(false)
+            setSaveSuccess('Perfil atualizado com sucesso.')
         } else {
             setSaveError('Nao foi possivel salvar seu perfil agora. Tente novamente.')
         }
@@ -437,6 +440,14 @@ export default function PerfilPage() {
                     <Card className="border border-amber-200 bg-amber-50 shadow-sm">
                         <CardContent className="p-4 text-sm text-amber-800">
                             {dataError}
+                        </CardContent>
+                    </Card>
+                )}
+
+                {saveSuccess && (
+                    <Card className="border border-emerald-200 bg-emerald-50 shadow-sm">
+                        <CardContent className="p-4 text-sm text-emerald-800">
+                            {saveSuccess}
                         </CardContent>
                     </Card>
                 )}

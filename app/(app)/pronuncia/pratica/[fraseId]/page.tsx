@@ -14,7 +14,15 @@ import { useAuth } from '@/lib/auth-context'
 import { buildCommunityShareHref } from '@/lib/community'
 import type { PronunciationAttempt, PronunciationItem } from '@/types/database'
 
-type PracticeState = 'ready' | 'listening' | 'recording' | 'processing' | 'result'
+type PracticeState = 'ready' | 'listening' | 'processing' | 'result'
+
+function getAudioExtension(mimeType: string) {
+    if (mimeType.includes('mp4')) return 'm4a'
+    if (mimeType.includes('mpeg')) return 'mp3'
+    if (mimeType.includes('ogg')) return 'ogg'
+    if (mimeType.includes('wav')) return 'wav'
+    return 'webm'
+}
 
 export default function PraticaPronunciaPage({ params }: { params: Promise<{ fraseId: string }> }) {
     const resolvedParams = use(params)
@@ -29,6 +37,7 @@ export default function PraticaPronunciaPage({ params }: { params: Promise<{ fra
     const [state, setState] = useState<PracticeState>('ready')
     const [error, setError] = useState<string | null>(null)
     const [scoreInfo, setScoreInfo] = useState<{ score: number, feedback: string, dica: string, transcricao: string, xpGanho: number } | null>(null)
+    const interactionLocked = state === 'listening' || state === 'processing'
 
     useEffect(() => {
         async function loadPracticeData() {
@@ -80,6 +89,8 @@ export default function PraticaPronunciaPage({ params }: { params: Promise<{ fra
             setError(null)
 
             try {
+                if (state === 'processing') return
+
                 let finalAudioUrl = audioUrl
 
                 if (!finalAudioUrl) {
@@ -119,7 +130,9 @@ export default function PraticaPronunciaPage({ params }: { params: Promise<{ fra
         setError(null)
 
         const formData = new FormData()
-        formData.append('audio', audioBlob, 'gravacao.webm')
+        const mimeType = audioBlob.type || 'audio/webm'
+        const filename = `gravacao.${getAudioExtension(mimeType)}`
+        formData.append('audio', audioBlob, filename)
         formData.append('item_id', item.id)
 
         try {
@@ -170,7 +183,7 @@ export default function PraticaPronunciaPage({ params }: { params: Promise<{ fra
     if (loadingData) {
         return (
             <div className="min-h-screen bg-background flex flex-col pt-[max(env(safe-area-inset-top),16px)]">
-                <TopBar title="Pronúncia" showBack />
+                <TopBar title="Pronúncia" showBack backHref="/pronuncia" />
                 <div className="flex-1 p-6 max-w-lg mx-auto w-full space-y-4">
                     <Skeleton className="h-32 rounded-3xl" />
                     <Skeleton className="h-16 rounded-full" />
@@ -183,7 +196,7 @@ export default function PraticaPronunciaPage({ params }: { params: Promise<{ fra
     if (!item) {
         return (
             <div className="min-h-screen bg-background flex flex-col pt-[max(env(safe-area-inset-top),16px)]">
-                <TopBar title="Pronúncia" showBack />
+                <TopBar title="Pronúncia" showBack backHref="/pronuncia" />
                 <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
                     {error || 'Esta frase de pronuncia nao esta disponivel.'}
                 </div>
@@ -193,7 +206,7 @@ export default function PraticaPronunciaPage({ params }: { params: Promise<{ fra
 
     return (
         <div className="min-h-screen bg-background flex flex-col pt-[max(env(safe-area-inset-top),16px)]">
-            <TopBar title="Pronúncia" showBack />
+            <TopBar title="Pronúncia" showBack backHref="/pronuncia" />
 
             <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-lg mx-auto w-full mb-20">
                 <AnimatePresence mode="wait">
@@ -206,9 +219,9 @@ export default function PraticaPronunciaPage({ params }: { params: Promise<{ fra
                             className="w-full flex flex-col items-center"
                         >
                             <div className="text-center mb-10">
-                                <p className="text-5xl font-extrabold mb-3 text-[var(--color-coreduca-blue)]">{item.frase_coreano}</p>
-                                <p className="text-lg text-muted-foreground font-semibold mb-1">{item.transliteracao}</p>
-                                <p className="text-md text-muted-foreground">{item.traducao}</p>
+                                <p className="text-3xl font-black mb-3 text-slate-900 drop-shadow-sm">{item.traducao}</p>
+                                <p className="text-4xl font-extrabold mb-2 text-[var(--color-coreduca-blue)]">{item.frase_coreano}</p>
+                                <p className="text-base text-slate-500 font-semibold mb-1">{item.transliteracao}</p>
                                 {bestScore > 0 && (
                                     <p className="mt-3 text-sm font-semibold text-[var(--color-coreduca-red)]">
                                         Melhor score: {bestScore}%
@@ -230,6 +243,8 @@ export default function PraticaPronunciaPage({ params }: { params: Promise<{ fra
                             <GravadorVoz
                                 onRecordingComplete={handleRecordingComplete}
                                 isProcessing={state === 'processing'}
+                                disabled={interactionLocked}
+                                onError={setError}
                             />
 
                             {error && (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, BookOpen, ChevronRight, ArrowLeft } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -22,25 +22,34 @@ type Trilha = {
 }
 
 export default function AdminMissoesPage() {
-    const supabase = createBrowserClient()
+    const supabase = useMemo(() => createBrowserClient(), [])
     const [trilhas, setTrilhas] = useState<Trilha[]>([])
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
     const [view, setView] = useState<'list' | 'manager'>('list')
     const [selectedTrilhaId, setSelectedTrilhaId] = useState<string | null>(null)
 
     const fetchTrilhas = useCallback(async () => {
-        const { data: trilhasData } = await supabase
+        const { data: trilhasData, error: trilhasError } = await supabase
             .from('trilhas')
             .select('id, titulo, descricao, ordem, icone, cor, ativo')
             .order('ordem')
 
+        if (trilhasError) {
+            throw trilhasError
+        }
+
         if (trilhasData) {
             const counts = await Promise.all(
                 trilhasData.map(async (trilha) => {
-                    const { count } = await supabase
+                    const { count, error: countError } = await supabase
                         .from('missoes')
                         .select('id', { count: 'exact', head: true })
                         .eq('trilha_id', trilha.id)
+
+                    if (countError) {
+                        throw countError
+                    }
 
                     return [trilha.id, count ?? 0] as const
                 })
@@ -64,10 +73,22 @@ export default function AdminMissoesPage() {
 
         async function loadTrilhas() {
             setLoading(true)
-            const loadedTrilhas = await fetchTrilhas()
-            if (!active) return
-            setTrilhas(loadedTrilhas)
-            setLoading(false)
+            setError(null)
+
+            try {
+                const loadedTrilhas = await fetchTrilhas()
+                if (!active) return
+                setTrilhas(loadedTrilhas)
+            } catch (loadError) {
+                console.error('Erro ao carregar trilhas no admin', loadError)
+                if (!active) return
+                setTrilhas([])
+                setError('Nao foi possivel carregar as trilhas agora.')
+            } finally {
+                if (active) {
+                    setLoading(false)
+                }
+            }
         }
 
         void loadTrilhas()
@@ -91,9 +112,17 @@ export default function AdminMissoesPage() {
                     onSaved={() => {
                         void (async () => {
                             setLoading(true)
-                            const loadedTrilhas = await fetchTrilhas()
-                            setTrilhas(loadedTrilhas)
-                            setLoading(false)
+                            setError(null)
+
+                            try {
+                                const loadedTrilhas = await fetchTrilhas()
+                                setTrilhas(loadedTrilhas)
+                            } catch (loadError) {
+                                console.error('Erro ao recarregar trilhas no admin', loadError)
+                                setError('A trilha foi salva, mas a lista nao atualizou. Recarregue a pagina se necessario.')
+                            } finally {
+                                setLoading(false)
+                            }
                         })()
                     }}
                 />
@@ -123,6 +152,11 @@ export default function AdminMissoesPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {error && (
+                    <div className="col-span-full rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        {error}
+                    </div>
+                )}
                 {loading ? (
                     [1, 2, 3].map(i => (
                         <Card key={i} className="animate-pulse shadow-sm">

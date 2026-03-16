@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback } from 'react'
+import Image from 'next/image'
+import { useCallback, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Volume2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -19,6 +20,8 @@ interface QuizCardProps {
 const culturalTypes = ['coreano_para_portugues', 'portugues_para_coreano']
 
 export function QuizCard({ questao, onResponder, disabled, selectedAnswer, correctAnswer }: QuizCardProps) {
+    const [failedImageKey, setFailedImageKey] = useState<string | null>(null)
+
     // Completar frase uses a different component
     if (questao.tipo === 'completar_frase') {
         return (
@@ -43,6 +46,8 @@ export function QuizCard({ questao, onResponder, disabled, selectedAnswer, corre
     }
 
     const isCultural = culturalTypes.includes(questao.tipo)
+    const imageKey = `${questao.id}:${questao.imagem_url ?? ''}`
+    const imageFailed = failedImageKey === imageKey
 
     return (
         <motion.div
@@ -86,14 +91,22 @@ export function QuizCard({ questao, onResponder, disabled, selectedAnswer, corre
                 )}
                 {questao.imagem_url && (
                     <div className="w-full h-40 bg-muted rounded-2xl flex items-center justify-center text-muted-foreground text-sm">
-                        <img
-                            src={questao.imagem_url}
-                            alt=""
-                            className="w-full h-full object-cover rounded-2xl"
-                            onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none'
-                            }}
-                        />
+                        {!imageFailed ? (
+                            <div className="relative h-full w-full overflow-hidden rounded-2xl">
+                                <Image
+                                    src={questao.imagem_url}
+                                    alt="Imagem da questao"
+                                    fill
+                                    unoptimized
+                                    loader={({ src }) => src}
+                                    sizes="(max-width: 768px) 100vw, 640px"
+                                    className="object-cover"
+                                    onError={() => setFailedImageKey(imageKey)}
+                                />
+                            </div>
+                        ) : (
+                            <span>Imagem indisponivel</span>
+                        )}
                     </div>
                 )}
             </div>

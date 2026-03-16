@@ -29,6 +29,7 @@ import {
   type CommunityClubSlug,
   type CommunityTagFilterValue,
 } from '@/lib/community'
+import { createCommunityPost, toggleCommunityReaction } from '@/lib/community-actions'
 import type {
   CommunityChannel,
   CommunityContextType,
@@ -83,10 +84,6 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
-function isMissingCommunityColumns(message: string) {
-  return message.includes('column') && message.includes('community_posts')
-}
-
 export default function CanalPage({ params }: { params: Promise<{ canalId: string }> }) {
   const { canalId } = use(params)
   const router = useRouter()
@@ -120,6 +117,28 @@ export default function CanalPage({ params }: { params: Promise<{ canalId: strin
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [selectedTag, setSelectedTag] = useState<CommunityTagFilterValue>('all')
   const [miniProfileUserId, setMiniProfileUserId] = useState<string | null>(null)
+  const [pendingReactionPostId, setPendingReactionPostId] = useState<string | null>(null)
+
+  const applyReactionLocally = useCallback((postId: string, emoji: string, reacted: boolean, userId: string) => {
+    setPosts((currentPosts) => currentPosts.map((post) => {
+      if (post.id !== postId) return post
+
+      const currentReactions = post.post_reactions || []
+      const nextReactions = reacted
+        ? currentReactions.filter((reaction) => !(reaction.user_id === userId && reaction.emoji === emoji))
+        : [...currentReactions, { emoji, user_id: userId }]
+      const currentCount = Number(post.reacoes?.[emoji] ?? 0)
+
+      return {
+        ...post,
+        post_reactions: nextReactions,
+        reacoes: {
+          ...(post.reacoes || {}),
+          [emoji]: Math.max(0, currentCount + (reacted ? -1 : 1)),
+        },
+      }
+    }))
+  }, [])
 
   const loadClub = useCallback(async () => {
     setLoading(true)
@@ -263,30 +282,17 @@ export default function CanalPage({ params }: { params: Promise<{ canalId: strin
       return
     }
 
-    const insertPayload = {
-      user_id: currentUser.id,
-      channel_id: payload.channelId,
+    const { error: insertError } = await createCommunityPost(supabase, {
+      userId: currentUser.id,
+      channelId: payload.channelId,
       conteudo: payload.conteudo,
-      post_kind: payload.postKind,
-      prompt_slug: payload.promptSlug,
-      context_type: payload.contextType,
-      context_id: payload.contextId,
-      context_label: payload.contextLabel,
-      context_date: payload.contextDate,
-    }
-
-    let insertError: { message: string } | null = null
-    const { error: postError } = await supabase.from('community_posts').insert(insertPayload)
-    insertError = postError ? { message: postError.message } : null
-
-    if (insertError && isMissingCommunityColumns(insertError.message)) {
-      const fallback = await supabase.from('community_posts').insert({
-        user_id: currentUser.id,
-        channel_id: payload.channelId,
-        conteudo: payload.conteudo,
-      })
-      insertError = fallback.error ? { message: fallback.error.message } : null
-    }
+      postKind: payload.postKind,
+      promptSlug: payload.promptSlug,
+      contextType: payload.contextType,
+      contextId: payload.contextId,
+      contextLabel: payload.contextLabel,
+      contextDate: payload.contextDate,
+    })
 
     setComposerSubmitting(false)
 
@@ -310,23 +316,24 @@ export default function CanalPage({ params }: { params: Promise<{ canalId: strin
 
     if (!currentUser) return
 
-    if (reacted) {
-      await supabase
-        .from('post_reactions')
-        .delete()
-        .eq('post_id', postId)
-        .eq('user_id', currentUser.id)
-        .eq('emoji', emoji)
-    } else {
-      await supabase.from('post_reactions').insert({
-        post_id: postId,
-        user_id: currentUser.id,
-        emoji,
-      })
+    const previousPosts = posts
+    setPendingReactionPostId(postId)
+    applyReactionLocally(postId, emoji, reacted, currentUser.id)
+
+    const { error } = await toggleCommunityReaction(supabase, {
+      postId,
+      userId: currentUser.id,
+      emoji,
+      reacted,
+    })
+
+    if (error) {
+      setPosts(previousPosts)
+      setError('Nao foi possivel atualizar sua reacao agora.')
     }
 
-    await loadClub()
-  }, [loadClub, supabase])
+    setPendingReactionPostId(null)
+  }, [applyReactionLocally, posts, supabase])
 
   const clubDefinition = clubSlug ? communityClubDefinitions[clubSlug] : null
   const visiblePosts = clubSlug === 'fandom' && selectedTag !== 'all'
@@ -339,7 +346,7 @@ export default function CanalPage({ params }: { params: Promise<{ canalId: strin
   if (loading) {
     return (
       <>
-        <TopBar title="Clube" showBack />
+        <TopBar title="Clube" showBack backHref="/comunidade" />
         <div className="space-y-4 px-4 py-5">
           <Skeleton className="h-32 rounded-3xl" />
           <Skeleton className="h-32 rounded-3xl" />
@@ -354,7 +361,7 @@ export default function CanalPage({ params }: { params: Promise<{ canalId: strin
   if (!clubDefinition) {
     return (
       <>
-        <TopBar title="Clube" showBack />
+        <TopBar title="Clube" showBack backHref="/comunidade" />
         <div className="px-4 py-10">
           <Card className="border-0 shadow-sm">
             <CardContent className="space-y-4 p-6 text-center">
@@ -371,10 +378,11 @@ export default function CanalPage({ params }: { params: Promise<{ canalId: strin
 
   return (
     <>
-      <TopBar
-        title={clubDefinition.title}
-        showBack
-        rightContent={
+        <TopBar
+          title={clubDefinition.title}
+          showBack
+          backHref="/comunidade"
+          rightContent={
           <Button
             size="sm"
             className="rounded-full bg-[var(--color-coreduca-blue)] text-white"
@@ -565,6 +573,7 @@ export default function CanalPage({ params }: { params: Promise<{ canalId: strin
                   href={`/comunidade/post/${post.id}`}
                   onToggleReaction={toggleReaction}
                   onOpenProfile={setMiniProfileUserId}
+                  reactionDisabled={pendingReactionPostId === post.id}
                 />
               </motion.div>
             ))

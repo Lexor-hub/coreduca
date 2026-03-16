@@ -12,41 +12,54 @@ export default function AdminDashboard() {
     const supabase = createBrowserClient()
     const [stats, setStats] = useState<Record<string, number>>({})
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         async function fetchStats() {
-            const [users, missoes, pronuncia, ia, xp, posts] = await Promise.all([
-                supabase.from('profiles').select('id', { count: 'exact', head: true }),
-                supabase.from('missao_attempts').select('id', { count: 'exact', head: true }).eq('status', 'concluida'),
-                supabase.from('pronunciation_attempts').select('id', { count: 'exact', head: true }),
-                supabase.from('ai_sessions').select('energia_usada'),
-                supabase.from('profiles').select('xp_total'),
-                supabase.from('community_posts').select('id', { count: 'exact', head: true }).eq('status', 'ativo'),
-            ])
+            try {
+                setError(null)
 
-            const totalIa = (ia.data || []).reduce((s, r) => s + (r.energia_usada || 0), 0)
-            const totalXp = (xp.data || []).reduce((s, r) => s + (r.xp_total || 0), 0)
+                const [users, missoes, pronuncia, ia, xp, posts] = await Promise.all([
+                    supabase.from('profiles').select('id', { count: 'exact', head: true }),
+                    supabase.from('missao_attempts').select('id', { count: 'exact', head: true }).eq('status', 'concluida'),
+                    supabase.from('pronunciation_attempts').select('id', { count: 'exact', head: true }),
+                    supabase.from('ai_sessions').select('energia_usada'),
+                    supabase.from('profiles').select('xp_total'),
+                    supabase.from('community_posts').select('id', { count: 'exact', head: true }).eq('status', 'ativo'),
+                ])
 
-            setStats({
-                users: users.count ?? 0,
-                missoes: missoes.count ?? 0,
-                pronuncia: pronuncia.count ?? 0,
-                ia: totalIa,
-                xp: totalXp,
-                posts: posts.count ?? 0,
-            })
-            setLoading(false)
+                if (users.error || missoes.error || pronuncia.error || ia.error || xp.error || posts.error) {
+                    throw users.error || missoes.error || pronuncia.error || ia.error || xp.error || posts.error
+                }
+
+                const totalIa = (ia.data || []).reduce((s, r) => s + (r.energia_usada || 0), 0)
+                const totalXp = (xp.data || []).reduce((s, r) => s + (r.xp_total || 0), 0)
+
+                setStats({
+                    users: users.count ?? 0,
+                    missoes: missoes.count ?? 0,
+                    pronuncia: pronuncia.count ?? 0,
+                    ia: totalIa,
+                    xp: totalXp,
+                    posts: posts.count ?? 0,
+                })
+            } catch (loadError) {
+                console.error('admin dashboard load error', loadError)
+                setError('Nao foi possivel carregar os indicadores administrativos agora.')
+            } finally {
+                setLoading(false)
+            }
         }
         fetchStats()
     }, [supabase])
 
     const statCards = [
-        { label: 'Usuárias ativas', valor: stats.users, icon: Users, cor: 'bg-[var(--color-coreduca-blue)]/10 text-[var(--color-coreduca-blue)]' },
-        { label: 'Missões concluídas', valor: stats.missoes, icon: BookOpen, cor: 'bg-[var(--color-coreduca-cyan)]/10 text-[var(--color-coreduca-cyan)]' },
-        { label: 'Áudios analisados', valor: stats.pronuncia, icon: Mic, cor: 'bg-[var(--color-coreduca-red)]/10 text-[var(--color-coreduca-red)]' },
-        { label: 'Conversas IA', valor: stats.ia, icon: MessageCircle, cor: 'bg-[var(--color-coreduca-purple)]/10 text-[var(--color-coreduca-purple)]' },
-        { label: 'XP distribuído', valor: stats.xp, icon: Zap, cor: 'bg-[var(--color-coreduca-yellow)]/10 text-[var(--color-coreduca-yellow)]' },
-        { label: 'Posts comunidade', valor: stats.posts, icon: TrendingUp, cor: 'bg-green-100 text-green-600' },
+        { label: 'Usuárias ativas', valor: stats.users, icon: Users, iconClass: 'bg-[var(--color-coreduca-blue)]/10 text-[var(--color-coreduca-blue)]', borderColor: 'var(--color-coreduca-blue)' },
+        { label: 'Missões concluídas', valor: stats.missoes, icon: BookOpen, iconClass: 'bg-[var(--color-coreduca-cyan)]/10 text-[var(--color-coreduca-cyan)]', borderColor: 'var(--color-coreduca-cyan)' },
+        { label: 'Áudios analisados', valor: stats.pronuncia, icon: Mic, iconClass: 'bg-[var(--color-coreduca-red)]/10 text-[var(--color-coreduca-red)]', borderColor: 'var(--color-coreduca-red)' },
+        { label: 'Conversas IA', valor: stats.ia, icon: MessageCircle, iconClass: 'bg-[var(--color-coreduca-purple)]/10 text-[var(--color-coreduca-purple)]', borderColor: 'var(--color-coreduca-purple)' },
+        { label: 'XP distribuído', valor: stats.xp, icon: Zap, iconClass: 'bg-[var(--color-coreduca-yellow)]/10 text-[var(--color-coreduca-yellow)]', borderColor: 'var(--color-coreduca-yellow)' },
+        { label: 'Posts comunidade', valor: stats.posts, icon: TrendingUp, iconClass: 'bg-green-100 text-green-600', borderColor: '#16a34a' },
     ]
 
     if (loading) {
@@ -72,6 +85,12 @@ export default function AdminDashboard() {
                 <h1 className="text-2xl font-extrabold">Dashboard Admin</h1>
             </div>
 
+            {error && (
+                <Card className="mb-4 border border-amber-200 bg-amber-50 shadow-sm">
+                    <CardContent className="p-4 text-sm text-amber-800">{error}</CardContent>
+                </Card>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {statCards.map((stat, i) => {
                     const Icon = stat.icon
@@ -82,9 +101,9 @@ export default function AdminDashboard() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.1 }}
                         >
-                            <Card className="border-0 shadow-sm border-l-4" style={{ borderLeftColor: stat.cor.split(' ')[1].replace('text-', '') }}>
+                            <Card className="border-0 shadow-sm border-l-4" style={{ borderLeftColor: stat.borderColor }}>
                                 <CardContent className="p-5 flex items-center gap-4">
-                                    <div className={`w-12 h-12 rounded-xl ${stat.cor} flex items-center justify-center`}>
+                                    <div className={`w-12 h-12 rounded-xl ${stat.iconClass} flex items-center justify-center`}>
                                         <Icon className="h-6 w-6" />
                                     </div>
                                     <div>

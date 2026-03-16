@@ -9,6 +9,26 @@ const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null
 
+const productDateFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+
+function getProductDayKey(date = new Date()) {
+  const parts = productDateFormatter.formatToParts(date)
+  const year = parts.find((part) => part.type === "year")?.value
+  const month = parts.find((part) => part.type === "month")?.value
+  const day = parts.find((part) => part.type === "day")?.value
+
+  if (!year || !month || !day) {
+    return date.toISOString().split("T")[0]
+  }
+
+  return `${year}-${month}-${day}`
+}
+
 function sanitizeHistory(history: unknown): AIMessage[] {
   if (!Array.isArray(history)) return []
 
@@ -65,7 +85,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Persona nao encontrada" }, { status: 404 })
   }
 
-  const today = new Date().toISOString().split("T")[0]
+  const today = getProductDayKey()
   const { data: session } = await supabase
     .from("ai_sessions")
     .select("mensagens, energia_usada")

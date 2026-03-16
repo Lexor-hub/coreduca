@@ -33,6 +33,7 @@ interface CommunityPostCardProps {
   href: string
   onToggleReaction: (postId: string, emoji: string, reacted: boolean) => void
   onOpenProfile: (userId: string) => void
+  reactionDisabled?: boolean
 }
 
 export function CommunityPostCard({
@@ -41,6 +42,7 @@ export function CommunityPostCard({
   href,
   onToggleReaction,
   onOpenProfile,
+  reactionDisabled = false,
 }: CommunityPostCardProps) {
   const postProfile = post.profiles
   const avatarParsed = parseAvatar(postProfile?.avatar_url)
@@ -110,6 +112,7 @@ export function CommunityPostCard({
               <button
                 key={emoji}
                 onClick={() => onToggleReaction(post.id, emoji, userReactions.has(emoji))}
+                disabled={reactionDisabled}
                 className={`flex items-center gap-0.5 rounded-full px-2 py-1 text-xs transition-colors ${
                   userReactions.has(emoji)
                     ? 'bg-[var(--color-coreduca-blue)]/10 text-[var(--color-coreduca-blue)]'

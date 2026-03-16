@@ -15,6 +15,14 @@ type PronunciationEvaluation = {
   palavras_acertadas: string[]
 }
 
+function getAudioExtension(contentType: string) {
+  if (contentType.includes('mp4')) return 'm4a'
+  if (contentType.includes('mpeg')) return 'mp3'
+  if (contentType.includes('ogg')) return 'ogg'
+  if (contentType.includes('wav')) return 'wav'
+  return 'webm'
+}
+
 function normalizeEvaluation(input: unknown): PronunciationEvaluation {
   if (!input || typeof input !== "object") {
     return {
@@ -75,14 +83,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Item de pronuncia nao encontrado" }, { status: 404 })
   }
 
-  const transcription = await openai.audio.transcriptions.create({
-    file: audioFile,
-    model: "whisper-1",
-    language: "ko",
-  })
+  try {
+    const transcription = await openai.audio.transcriptions.create({
+      file: audioFile,
+      model: "whisper-1",
+      language: "ko",
+    })
 
-  const transcricao = transcription.text.trim()
-  const evaluationPrompt = `
+    const transcricao = transcription.text.trim()
+    const evaluationPrompt = `
 Voce avalia pronuncia de coreano para iniciantes.
 
 Frase alvo: "${item.frase_coreano}"
@@ -99,54 +108,75 @@ Responda somente com JSON neste formato:
 }
 `
 
-  const evaluationCompletion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    response_format: { type: "json_object" },
-    max_tokens: 200,
-    messages: [{ role: "user", content: evaluationPrompt }],
-  })
-
-  const parsed = normalizeEvaluation(
-    JSON.parse(evaluationCompletion.choices[0]?.message?.content || "{}")
-  )
-
-  const xpGanho = parsed.score >= 90 ? 15 : parsed.score >= 70 ? 10 : parsed.score >= 50 ? 5 : 2
-  const audioPath = `pronuncia/${user.id}/${item.id}/${Date.now()}.webm`
-  const audioBuffer = await audioFile.arrayBuffer()
-
-  await supabase.storage.from("audios").upload(audioPath, audioBuffer, {
-    contentType: audioFile.type || "audio/webm",
-    upsert: false,
-  })
-
-  await supabase.from("pronunciation_attempts").insert({
-    user_id: user.id,
-    item_id: item.id,
-    audio_url: audioPath,
-    transcricao_obtida: transcricao,
-    score: parsed.score,
-    feedback: parsed.feedback,
-    palavras_chave_acertadas: parsed.palavras_acertadas,
-    xp_ganho: xpGanho,
-  })
-
-  await supabase.rpc("incrementar_xp", {
-    uid: user.id,
-    valor: xpGanho,
-  })
-
-  if (parsed.score >= 90) {
-    await supabase.rpc("grant_badge_by_slug", {
-      uid: user.id,
-      badge_slug: "pronuncia_90",
+    const evaluationCompletion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      response_format: { type: "json_object" },
+      max_tokens: 200,
+      messages: [{ role: "user", content: evaluationPrompt }],
     })
-  }
 
-  return NextResponse.json({
-    score: parsed.score,
-    feedback: parsed.feedback,
-    dica: parsed.dica,
-    transcricao,
-    xp_ganho: xpGanho,
-  })
+    const parsed = normalizeEvaluation(
+      JSON.parse(evaluationCompletion.choices[0]?.message?.content || "{}")
+    )
+
+    const xpGanho = parsed.score >= 90 ? 15 : parsed.score >= 70 ? 10 : parsed.score >= 50 ? 5 : 2
+    const audioExtension = getAudioExtension(audioFile.type || "audio/webm")
+    const audioPath = `pronuncia/${user.id}/${item.id}/${Date.now()}.${audioExtension}`
+    const audioBuffer = await audioFile.arrayBuffer()
+
+    const { error: uploadError } = await supabase.storage.from("audios").upload(audioPath, audioBuffer, {
+      contentType: audioFile.type || "audio/webm",
+      upsert: false,
+    })
+
+    if (uploadError) {
+      return NextResponse.json({ error: "Nao foi possivel salvar seu audio agora." }, { status: 500 })
+    }
+
+    const { error: attemptError } = await supabase.from("pronunciation_attempts").insert({
+      user_id: user.id,
+      item_id: item.id,
+      audio_url: audioPath,
+      transcricao_obtida: transcricao,
+      score: parsed.score,
+      feedback: parsed.feedback,
+      palavras_chave_acertadas: parsed.palavras_acertadas,
+      xp_ganho: xpGanho,
+    })
+
+    if (attemptError) {
+      return NextResponse.json({ error: "Sua tentativa foi avaliada, mas nao conseguimos registra-la agora." }, { status: 500 })
+    }
+
+    const { error: xpError } = await supabase.rpc("incrementar_xp", {
+      uid: user.id,
+      valor: xpGanho,
+    })
+
+    if (xpError) {
+      return NextResponse.json({ error: "Sua tentativa foi salva, mas nao conseguimos creditar o XP agora." }, { status: 500 })
+    }
+
+    if (parsed.score >= 90) {
+      const { error: badgeError } = await supabase.rpc("grant_badge_by_slug", {
+        uid: user.id,
+        badge_slug: "pronuncia_90",
+      })
+
+      if (badgeError) {
+        return NextResponse.json({ error: "Sua tentativa foi salva, mas nao conseguimos liberar a badge agora." }, { status: 500 })
+      }
+    }
+
+    return NextResponse.json({
+      score: parsed.score,
+      feedback: parsed.feedback,
+      dica: parsed.dica,
+      transcricao,
+      xp_ganho: xpGanho,
+    })
+  } catch (error) {
+    console.error("pronunciation evaluation failed", error)
+    return NextResponse.json({ error: "Nao foi possivel avaliar sua pronuncia agora." }, { status: 500 })
+  }
 }

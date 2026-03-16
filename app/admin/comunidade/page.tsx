@@ -27,10 +27,13 @@ export default function AdminComunidadePage() {
     const supabase = createBrowserClient()
     const [posts, setPosts] = useState<ModerationPost[]>([])
     const [reports, setReports] = useState<ReportRow[]>([])
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         async function loadData() {
-            const [{ data: postsData }, { data: reportsData }] = await Promise.all([
+            setError(null)
+            const [{ data: postsData, error: postsError }, { data: reportsData, error: reportsError }] = await Promise.all([
                 supabase
                     .from('community_posts')
                     .select('id, conteudo, status, pinned, created_at, profiles(display_name, username)')
@@ -41,20 +44,33 @@ export default function AdminComunidadePage() {
                     .order('created_at', { ascending: false }),
             ])
 
+            if (postsError || reportsError) {
+                setError('Nao foi possivel carregar a moderacao da comunidade agora.')
+            }
+
             setPosts(((postsData as unknown) as ModerationPost[]) || [])
             setReports((reportsData as ReportRow[]) || [])
+            setLoading(false)
         }
 
         void loadData()
     }, [supabase])
 
     const updatePost = async (postId: string, payload: Partial<ModerationPost>) => {
-        await supabase.from('community_posts').update(payload).eq('id', postId)
+        const { error: updateError } = await supabase.from('community_posts').update(payload).eq('id', postId)
+        if (updateError) {
+            setError('Nao foi possivel salvar essa alteracao de moderacao.')
+            return
+        }
         setPosts((current) => current.map((post) => post.id === postId ? { ...post, ...payload } : post))
     }
 
     const updateReport = async (reportId: string, status: ReportRow['status']) => {
-        await supabase.from('post_reports').update({ status }).eq('id', reportId)
+        const { error: updateError } = await supabase.from('post_reports').update({ status }).eq('id', reportId)
+        if (updateError) {
+            setError('Nao foi possivel atualizar a denuncia agora.')
+            return
+        }
         setReports((current) => current.map((report) => report.id === reportId ? { ...report, status } : report))
     }
 
@@ -68,7 +84,14 @@ export default function AdminComunidadePage() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    {posts.map((post) => (
+                    {error && (
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                            {error}
+                        </div>
+                    )}
+                    {loading ? (
+                        <p className="text-sm text-muted-foreground">Carregando...</p>
+                    ) : posts.map((post) => (
                         <div key={post.id} className="rounded-3xl border border-border/60 p-4">
                             <p className="text-sm font-bold">{post.profiles?.display_name || post.profiles?.username}</p>
                             <p className="mt-2 text-sm leading-relaxed">{post.conteudo}</p>

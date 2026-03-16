@@ -34,20 +34,35 @@ export default function AdminStorePage() {
     const [items, setItems] = useState<EditableStoreItem[]>([])
     const [selectedItem, setSelectedItem] = useState<EditableStoreItem>(emptyItem())
     const [saving, setSaving] = useState(false)
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         async function loadItems() {
-            const { data } = await supabase.from('store_items').select('*').order('ordem')
+            setError(null)
+            const { data, error: loadError } = await supabase.from('store_items').select('*').order('ordem')
             const loaded = (data as EditableStoreItem[]) || []
-            setItems(loaded)
-            if (loaded.length > 0) setSelectedItem(loaded[0])
+            if (loadError) {
+                setError('Nao foi possivel carregar os itens da store agora.')
+                setItems([])
+            } else {
+                setItems(loaded)
+                if (loaded.length > 0) setSelectedItem(loaded[0])
+            }
+            setLoading(false)
         }
 
         void loadItems()
     }, [supabase])
 
     const handleSave = async () => {
+        if (!selectedItem.titulo.trim()) {
+            setError('Informe pelo menos o titulo do item antes de salvar.')
+            return
+        }
+
         setSaving(true)
+        setError(null)
         const payload = {
             titulo: selectedItem.titulo,
             descricao: selectedItem.descricao || null,
@@ -68,7 +83,10 @@ export default function AdminStorePage() {
             if (data) setSelectedItem(data as EditableStoreItem)
         }
 
-        const { data } = await supabase.from('store_items').select('*').order('ordem')
+        const { data, error: reloadError } = await supabase.from('store_items').select('*').order('ordem')
+        if (reloadError) {
+            setError('O item foi salvo, mas a lista nao pode ser atualizada agora.')
+        }
         setItems((data as EditableStoreItem[]) || [])
         setSaving(false)
     }
@@ -87,7 +105,12 @@ export default function AdminStorePage() {
                     </Button>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                    {items.map((item) => (
+                    {error && (
+                        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{error}</p>
+                    )}
+                    {loading ? (
+                        <p className="text-sm text-muted-foreground">Carregando...</p>
+                    ) : items.map((item) => (
                         <button
                             key={item.id}
                             onClick={() => setSelectedItem(item)}

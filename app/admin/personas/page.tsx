@@ -37,20 +37,35 @@ export default function AdminPersonasPage() {
     const [personas, setPersonas] = useState<EditablePersona[]>([])
     const [selectedPersona, setSelectedPersona] = useState<EditablePersona>(emptyPersona())
     const [saving, setSaving] = useState(false)
+    const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
         async function loadPersonas() {
-            const { data } = await supabase.from('ai_personas').select('*').order('ordem')
+            setError(null)
+            const { data, error: loadError } = await supabase.from('ai_personas').select('*').order('ordem')
             const loaded = (data as EditablePersona[]) || []
-            setPersonas(loaded)
-            if (loaded.length > 0) setSelectedPersona(loaded[0])
+            if (loadError) {
+                setError('Nao foi possivel carregar as personas agora.')
+                setPersonas([])
+            } else {
+                setPersonas(loaded)
+                if (loaded.length > 0) setSelectedPersona(loaded[0])
+            }
+            setLoading(false)
         }
 
         void loadPersonas()
     }, [supabase])
 
     const handleSave = async () => {
+        if (!selectedPersona.slug.trim() || !selectedPersona.nome.trim() || !selectedPersona.system_prompt.trim()) {
+            setError('Slug, nome e system prompt sao obrigatorios.')
+            return
+        }
+
         setSaving(true)
+        setError(null)
         const payload = {
             slug: selectedPersona.slug,
             nome: selectedPersona.nome,
@@ -74,7 +89,10 @@ export default function AdminPersonasPage() {
             if (data) setSelectedPersona(data as EditablePersona)
         }
 
-        const { data } = await supabase.from('ai_personas').select('*').order('ordem')
+        const { data, error: reloadError } = await supabase.from('ai_personas').select('*').order('ordem')
+        if (reloadError) {
+            setError('A persona foi salva, mas a lista nao pode ser atualizada agora.')
+        }
         setPersonas((data as EditablePersona[]) || [])
         setSaving(false)
     }
@@ -93,7 +111,12 @@ export default function AdminPersonasPage() {
                     </Button>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                    {personas.map((persona) => (
+                    {error && (
+                        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{error}</p>
+                    )}
+                    {loading ? (
+                        <p className="text-sm text-muted-foreground">Carregando...</p>
+                    ) : personas.map((persona) => (
                         <button
                             key={persona.id}
                             onClick={() => setSelectedPersona(persona)}

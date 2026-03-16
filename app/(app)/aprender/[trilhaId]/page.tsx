@@ -14,10 +14,13 @@ import { use } from 'react'
 import type { Missao, Trilha } from '@/types/database'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
+import { getTrailLockState } from '@/lib/learning'
 
 type AttemptRow = { missao_id: string }
 type TrilhaResumo = Pick<Trilha, 'id' | 'titulo' | 'icone' | 'descricao'>
 type MissaoResumo = Pick<Missao, 'id' | 'titulo' | 'descricao' | 'ordem' | 'xp_recompensa'>
+type TrilhaOrdem = Pick<Trilha, 'id'>
+type UserProgressRow = { trilha_id: string; percentual: number }
 
 export default function TrilhaDetailPage({ params }: { params: Promise<{ trilhaId: string }> }) {
     const { trilhaId } = use(params)
@@ -29,6 +32,7 @@ export default function TrilhaDetailPage({ params }: { params: Promise<{ trilhaI
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [reloadKey, setReloadKey] = useState(0)
+    const [isLocked, setIsLocked] = useState(false)
 
     useEffect(() => {
         let cancelled = false
@@ -48,34 +52,56 @@ export default function TrilhaDetailPage({ params }: { params: Promise<{ trilhaI
                     throw trilhaError
                 }
 
-                const { data: missoesData, error: missoesError } = await supabase
-                    .from('missoes')
-                    .select('id, titulo, descricao, ordem, xp_recompensa')
-                    .eq('trilha_id', trilhaId)
-                    .eq('ativo', true)
-                    .order('ordem')
+                const [
+                    { data: orderedTrailsData, error: orderedTrailsError },
+                    { data: missoesData, error: missoesError },
+                ] = await Promise.all([
+                    supabase
+                        .from('trilhas')
+                        .select('id')
+                        .eq('ativo', true)
+                        .order('ordem'),
+                    supabase
+                        .from('missoes')
+                        .select('id, titulo, descricao, ordem, xp_recompensa')
+                        .eq('trilha_id', trilhaId)
+                        .eq('ativo', true)
+                        .order('ordem'),
+                ])
 
-                if (missoesError) {
-                    throw missoesError
-                }
-
-                if (!cancelled) {
-                    setTrilha(trilhaData)
-                    setMissoes(missoesData ?? [])
+                if (orderedTrailsError || missoesError) {
+                    throw orderedTrailsError || missoesError
                 }
 
                 if (user) {
-                    const { data: attempts } = await supabase
-                        .from('missao_attempts')
-                        .select('missao_id')
-                        .eq('user_id', user.id)
-                        .eq('status', 'concluida')
+                    const [{ data: attempts }, { data: progressData }] = await Promise.all([
+                        supabase
+                            .from('missao_attempts')
+                            .select('missao_id')
+                            .eq('user_id', user.id)
+                            .eq('status', 'concluida'),
+                        supabase
+                            .from('user_progress')
+                            .select('trilha_id, percentual')
+                            .eq('user_id', user.id),
+                    ])
 
-                    if (!cancelled && attempts) {
-                        setCompletedIds(new Set((attempts as AttemptRow[]).map((attempt) => attempt.missao_id)))
+                    if (!cancelled) {
+                        const progressMap = Object.fromEntries(
+                            ((progressData as UserProgressRow[]) ?? []).map((progress) => [progress.trilha_id, progress])
+                        )
+                        const lockState = getTrailLockState((orderedTrailsData as TrilhaOrdem[]) ?? [], progressMap, trilhaId)
+
+                        setTrilha(trilhaData)
+                        setMissoes(missoesData ?? [])
+                        setCompletedIds(new Set(((attempts as AttemptRow[]) ?? []).map((attempt) => attempt.missao_id)))
+                        setIsLocked(lockState.isLocked)
                     }
                 } else if (!cancelled) {
+                    setTrilha(trilhaData)
+                    setMissoes(missoesData ?? [])
                     setCompletedIds(new Set())
+                    setIsLocked(false)
                 }
             } catch (error) {
                 console.error('Erro ao carregar trilha', error)
@@ -83,6 +109,7 @@ export default function TrilhaDetailPage({ params }: { params: Promise<{ trilhaI
                     setTrilha(null)
                     setMissoes([])
                     setCompletedIds(new Set())
+                    setIsLocked(false)
                     setError('Nao foi possivel carregar esta trilha agora.')
                 }
             } finally {
@@ -115,7 +142,7 @@ export default function TrilhaDetailPage({ params }: { params: Promise<{ trilhaI
     if (error) {
         return (
             <>
-                <TopBar title="Trilha" showBack />
+                <TopBar title="Trilha" showBack backHref="/aprender" />
                 <div className="px-4 py-10">
                     <Card className="mx-auto max-w-lg border-0 shadow-md">
                         <CardContent className="space-y-4 p-6 text-center">
@@ -141,7 +168,7 @@ export default function TrilhaDetailPage({ params }: { params: Promise<{ trilhaI
 
     return (
         <>
-            <TopBar title={trilha?.titulo || 'Trilha'} showBack />
+            <TopBar title={trilha?.titulo || 'Trilha'} showBack backHref="/aprender" />
 
             <div className="px-4 py-5">
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
@@ -182,8 +209,24 @@ export default function TrilhaDetailPage({ params }: { params: Promise<{ trilhaI
                     </Card>
                 </motion.div>
 
+                {isLocked && (
+                    <Card className="mb-6 border-0 bg-amber-50 shadow-sm">
+                        <CardContent className="space-y-4 p-5">
+                            <div>
+                                <p className="text-sm font-bold text-amber-950">Trilha bloqueada por progresso</p>
+                                <p className="mt-1 text-sm text-amber-900/80">
+                                    Finalize 100% da trilha anterior para liberar esta etapa.
+                                </p>
+                            </div>
+                            <Button onClick={() => window.location.assign('/aprender')} className="rounded-full bg-amber-900 text-white hover:bg-amber-950">
+                                Voltar para Aprender
+                            </Button>
+                        </CardContent>
+                    </Card>
+                )}
+
                 <div className="space-y-3">
-                    {missoes.map((missao, i) => {
+                    {!isLocked && missoes.map((missao, i) => {
                         const isCompleted = completedIds.has(missao.id)
                         const isAvailable = i === 0 || completedIds.has(missoes[i - 1]?.id)
                         const status = isCompleted ? 'concluida' : isAvailable ? 'disponivel' : 'bloqueada'

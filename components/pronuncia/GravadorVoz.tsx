@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Mic, Square, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,65 +8,150 @@ import { Button } from '@/components/ui/button'
 interface GravadorVozProps {
     onRecordingComplete: (audioBlob: Blob) => void
     isProcessing: boolean
+    disabled?: boolean
+    onError?: (message: string) => void
 }
 
-export function GravadorVoz({ onRecordingComplete, isProcessing }: GravadorVozProps) {
+const RECORDER_CANDIDATE_MIME_TYPES = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
+]
+
+function getSupportedMimeType() {
+    if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+        return ''
+    }
+
+    return RECORDER_CANDIDATE_MIME_TYPES.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) || ''
+}
+
+export function GravadorVoz({ onRecordingComplete, isProcessing, disabled = false, onError }: GravadorVozProps) {
     const [isRecording, setIsRecording] = useState(false)
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+    const mediaStreamRef = useRef<MediaStream | null>(null)
     const audioChunksRef = useRef<Blob[]>([])
+    const audioMimeTypeRef = useRef('audio/webm')
+
+    const stopTracks = useCallback(() => {
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+        mediaStreamRef.current = null
+    }, [])
+
+    const resetRecorder = useCallback(() => {
+        if (!mediaRecorderRef.current) return
+
+        mediaRecorderRef.current.ondataavailable = null
+        mediaRecorderRef.current.onstop = null
+        mediaRecorderRef.current.onerror = null
+        mediaRecorderRef.current = null
+    }, [])
+
+    const pushError = useCallback((message: string) => {
+        onError?.(message)
+    }, [onError])
+
+    useEffect(() => {
+        return () => {
+            try {
+                if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+                    mediaRecorderRef.current.stop()
+                }
+            } catch {
+                // noop
+            } finally {
+                stopTracks()
+                resetRecorder()
+            }
+        }
+    }, [resetRecorder, stopTracks])
 
     const getMicrophonePermission = async () => {
         try {
-            if ('MediaRecorder' in window) {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: true,
-                    video: false,
-                })
-                return stream
-            } else {
-                alert('Seu navegador não suporta gravação de áudio.')
+            if (!('MediaRecorder' in window) || !navigator.mediaDevices?.getUserMedia) {
+                pushError('Seu navegador nao suporta gravacao de audio.')
                 return null
             }
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: false,
+            })
+            return stream
         } catch {
-            alert('Permissão de microfone negada.')
+            pushError('Permissao de microfone negada ou indisponivel.')
             return null
         }
     }
 
     const startRecording = async () => {
+        if (disabled || isProcessing) return
+
         const stream = await getMicrophonePermission()
         if (!stream) return
 
-        setIsRecording(true)
-        const media = new MediaRecorder(stream, { mimeType: 'audio/webm' })
-        mediaRecorderRef.current = media
-        mediaRecorderRef.current.start(100)
+        const mimeType = getSupportedMimeType()
+        let media: MediaRecorder
 
+        try {
+            media = mimeType
+                ? new MediaRecorder(stream, { mimeType })
+                : new MediaRecorder(stream)
+        } catch {
+            stopTracks()
+            pushError('Nao foi possivel iniciar a gravacao neste dispositivo.')
+            return
+        }
+
+        mediaStreamRef.current = stream
+        mediaRecorderRef.current = media
+        audioMimeTypeRef.current = media.mimeType || mimeType || 'audio/webm'
         const localAudioChunks: Blob[] = []
 
-        mediaRecorderRef.current.ondataavailable = (event) => {
+        media.ondataavailable = (event) => {
             if (typeof event.data === 'undefined') return
             if (event.data.size === 0) return
             localAudioChunks.push(event.data)
         }
 
+        media.onerror = () => {
+            setIsRecording(false)
+            stopTracks()
+            resetRecorder()
+            pushError('A gravacao falhou antes de ser concluida. Tente novamente.')
+        }
+
+        media.onstop = () => {
+            const audioBlob = new Blob(audioChunksRef.current, { type: audioMimeTypeRef.current || 'audio/webm' })
+            audioChunksRef.current = []
+            setIsRecording(false)
+            stopTracks()
+            resetRecorder()
+
+            if (audioBlob.size === 0) {
+                pushError('Sua gravacao ficou vazia. Tente novamente.')
+                return
+            }
+
+            onRecordingComplete(audioBlob)
+        }
+
         audioChunksRef.current = localAudioChunks
+        setIsRecording(true)
+        media.start(100)
     }
 
     const stopRecording = () => {
         if (!mediaRecorderRef.current) return
 
-        setIsRecording(false)
-        mediaRecorderRef.current.stop()
-
-        mediaRecorderRef.current.onstop = () => {
-            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
-            audioChunksRef.current = [] // clear internal memory
-
-            // Stop all tracks to turn off recording light
-            mediaRecorderRef.current?.stream.getTracks().forEach(track => track.stop())
-
-            onRecordingComplete(audioBlob)
+        try {
+            mediaRecorderRef.current.stop()
+        } catch {
+            setIsRecording(false)
+            stopTracks()
+            resetRecorder()
+            pushError('Nao foi possivel encerrar a gravacao. Tente novamente.')
         }
     }
 
@@ -92,6 +177,7 @@ export function GravadorVoz({ onRecordingComplete, isProcessing }: GravadorVozPr
                     <Button
                         size="icon"
                         onClick={isRecording ? stopRecording : startRecording}
+                        disabled={disabled || isProcessing}
                         className={`w-20 h-20 rounded-full shadow-lg ${isRecording
                                 ? 'bg-[var(--color-coreduca-red)] hover:bg-[var(--color-coreduca-red)]/90 text-white'
                                 : 'bg-[var(--color-coreduca-blue)] hover:bg-[var(--color-coreduca-blue)]/90 text-white'
