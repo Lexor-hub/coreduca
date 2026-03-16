@@ -133,8 +133,8 @@ export async function POST(request: NextRequest) {
 
   if (energiaUsada === 0) {
     await supabase.rpc("incrementar_xp", {
-      p_user_id: user.id,
-      p_xp: 5,
+      uid: user.id,
+      valor: 5,
     })
   }
 

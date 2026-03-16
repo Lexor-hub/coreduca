@@ -16,7 +16,7 @@ type UserProgress = {
     trilha_id: string
     missoes_concluidas: number
     total_missoes: number
-    percentual_conclusao: number
+    percentual: number
 }
 
 export default function AprenderPage() {
@@ -156,7 +156,7 @@ export default function AprenderPage() {
                 {trilhas.map((trilha, index) => {
                     const progress = progressMap[trilha.id]
                     const isLocked = index > 0 && !progressMap[trilhas[index - 1]?.id]
-                    const progresso = progress?.percentual_conclusao ?? 0
+                    const progresso = progress?.percentual ?? 0
                     const concluidas = progress?.missoes_concluidas ?? 0
                     const total = progress?.total_missoes ?? 5
 

@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const registrarStreak = useCallback(async (userId: string) => {
         try {
-            await supabase.rpc('registrar_streak_diario', { p_user_id: userId })
+            await supabase.rpc('registrar_streak_diario', { uid: userId })
         } catch {
             // silently fail - streak is non-critical
         }

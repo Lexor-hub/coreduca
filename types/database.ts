@@ -327,7 +327,7 @@ export type Database = {
           trilha_id: string
           total_missoes: number
           missoes_concluidas: number
-          percentual_conclusao: number
+          percentual: number
           updated_at: string
         }>
     }
@@ -338,28 +338,29 @@ export type Database = {
       finalizar_missao: {
         Args: {
           p_missao_id: string
-          p_user_id: string
           p_respostas: Json
         }
         Returns: QuizCompletionResult
       }
       grant_badge_by_slug: {
         Args: {
-          p_user_id: string
-          p_badge_slug: string
+          uid: string
+          badge_slug: string
         }
-        Returns: boolean
+        Returns: string | null
       }
       incrementar_xp: {
         Args: {
-          p_user_id: string
-          p_xp: number
+          uid: string
+          valor: number
+          acao?: string
+          referencia_id?: string | null
         }
         Returns: number
       }
       registrar_streak_diario: {
         Args: {
-          p_user_id: string
+          uid: string
         }
         Returns: number
       }

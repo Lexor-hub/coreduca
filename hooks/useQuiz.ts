@@ -1,11 +1,11 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { createBrowserClient } from '@/lib/supabase/client'
 import type { Questao, QuizAnswers, QuizCompletionResult } from '@/types/database'
 
 export type EstadoQuiz = 'carregando' | 'respondendo' | 'feedback' | 'reforco' | 'concluido' | 'erro'
 
 export function useQuiz(missaoId: string, userId: string) {
-    const supabase = createBrowserClient()
+    const supabaseRef = useRef(createBrowserClient())
     const [estado, setEstado] = useState<EstadoQuiz>('carregando')
     const [todasQuestoes, setTodasQuestoes] = useState<Questao[]>([])
     const [questoes, setQuestoes] = useState<Questao[]>([])
@@ -23,25 +23,37 @@ export function useQuiz(missaoId: string, userId: string) {
         setErro(null)
         setEstado('carregando')
 
-        const { data, error } = await supabase
-            .rpc('finalizar_missao', {
-                p_missao_id: missaoId,
-                p_user_id: userId,
-                p_respostas: finalResponses,
+        try {
+            const response = await fetch('/api/missoes/finalizar', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    missaoId,
+                    respostas: finalResponses,
+                }),
             })
-            .single()
 
-        if (error) {
+            const payload = await response.json()
+
+            if (!response.ok) {
+                throw new Error(
+                    typeof payload?.error === 'string'
+                        ? payload.error
+                        : 'Nao foi possivel concluir esta missao agora.'
+                )
+            }
+
+            setResultado(payload as QuizCompletionResult)
+            setEstado('concluido')
+        } catch (error) {
             console.error('Erro ao concluir missao', error)
             setResultado(null)
-            setErro('Nao foi possivel concluir esta missao agora.')
+            setErro(error instanceof Error ? error.message : 'Nao foi possivel concluir esta missao agora.')
             setEstado('erro')
-            return
         }
-
-        setResultado(data as QuizCompletionResult)
-        setEstado('concluido')
-    }, [missaoId, userId, supabase])
+    }, [missaoId, userId])
 
     // Carregar questões
     const iniciar = useCallback(async () => {
@@ -54,7 +66,7 @@ export function useQuiz(missaoId: string, userId: string) {
         setResultado(null)
         setErro(null)
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseRef.current
             .from('questoes')
             .select('*')
             .eq('missao_id', missaoId)
@@ -87,7 +99,7 @@ export function useQuiz(missaoId: string, userId: string) {
             })
             setEstado('concluido')
         }
-    }, [missaoId, supabase])
+    }, [missaoId])
 
     // Responder questão
     const responder = useCallback(async (questaoId: string, resposta: string) => {

@@ -131,14 +131,14 @@ Responda somente com JSON neste formato:
   })
 
   await supabase.rpc("incrementar_xp", {
-    p_user_id: user.id,
-    p_xp: xpGanho,
+    uid: user.id,
+    valor: xpGanho,
   })
 
   if (parsed.score >= 90) {
     await supabase.rpc("grant_badge_by_slug", {
-      p_user_id: user.id,
-      p_badge_slug: "pronuncia_90",
+      uid: user.id,
+      badge_slug: "pronuncia_90",
     })
   }
 
